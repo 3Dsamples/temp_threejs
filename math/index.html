@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Custom math_Folder_threejs — test harness</title>
+<style>
+  body { background:#fff; padding:16px; }
+  h1 { font-family:monospace; font-size:14px; }
+</style>
+</head>
+<body>
+<h1>Custom math_Folder_threejs — test harness</h1>
+<!-- CDN dependencies: the math module imports these ESM URLs directly. -->
+<script type="importmap">
+{
+  "imports": {
+    "https://cdn.jsdelivr.net/npm/gl-matrix@3.4.4/gl-matrix-min.js": "https://cdn.jsdelivr.net/npm/gl-matrix@3.4.4/gl-matrix-min.js",
+    "https://cdn.jsdelivr.net/npm/bitecs@0.4.0/dist/core/index.mjs": "https://cdn.jsdelivr.net/npm/bitecs@0.4.0/dist/core/index.mjs",
+    "https://cdn.jsdelivr.net/npm/double.js@1.1.0/dist/double.js": "https://cdn.jsdelivr.net/npm/double.js@1.1.0/dist/double.js",
+    "https://cdn.jsdelivr.net/npm/simplex-noise@4.0.3/dist/esm/simplex-noise.js": "https://cdn.jsdelivr.net/npm/simplex-noise@4.0.3/dist/esm/simplex-noise.js",
+    "https://raw.githubusercontent.com/mrdoob/three.js/r185/src/utils.js": "https://raw.githubusercontent.com/mrdoob/three.js/r185/src/utils.js"
+  }
+}
+</script>
+<script type="module" src="./Custom math_Folder_threejs.test.js"></script>
+</body>
+</html>

@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+	<meta name="color-scheme" content="dark" />
+	<meta name="description" content="003 Vec3 Demo — Three.js r185 native browser host with transparent UI" />
+	<title>003 Vec3 Demo — Three.js r185</title>
+
+	<!-- Demo stylesheet -->
+	<link rel="stylesheet" href="./003_vec3_demo.css" />
+
+	<style>
+		/* ================================================================
+		   CRITICAL / HOST STYLES
+		   ================================================================ */
+		*,
+		*::before,
+		*::after {
+			box-sizing: border-box;
+		}
+
+		html,
+		body {
+			margin: 0;
+			padding: 0;
+			width: 100%;
+			height: 100%;
+			overflow: hidden;
+			background: transparent;
+			color: #eaf3fb;
+			font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+			-webkit-font-smoothing: antialiased;
+			-moz-osx-font-smoothing: grayscale;
+		}
+
+		#app,
+		#vec3-demo,
+		.vec3-demo,
+		.vec3-demo-root {
+			position: relative;
+			width: 100%;
+			height: 100%;
+			overflow: hidden;
+			isolation: isolate;
+			background: transparent;
+		}
+
+		canvas {
+			display: block;
+			width: 100%;
+			height: 100%;
+			touch-action: none;
+			outline: none;
+			background: transparent;
+		}
+
+		/* ================================================================
+		   TRANSPARENT UI OVERRIDES
+		   Force all demo-generated UI panels to transparent backgrounds
+		   ================================================================ */
+
+		/* Main demo panel created by 003_vec3_demo.js */
+		.vec3-demo-panel,
+		body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast),
+		div[style*="background:rgba(8,11,16"],
+		div[style*="background: rgba(8, 11, 16"],
+		div[style*="backdrop-filter"] {
+			background: rgba(5, 8, 12, 0.35) !important;
+			backdrop-filter: blur(6px) saturate(120%) !important;
+			-webkit-backdrop-filter: blur(6px) saturate(120%) !important;
+			border-color: rgba(255, 255, 255, 0.08) !important;
+			box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25) !important;
+		}
+
+		/* Info / status boxes inside panel */
+		.vec3-demo-panel pre,
+		.vec3-demo-panel div[style*="background:rgba(255,255,255,0.05)"],
+		body > div[style*="fixed"] pre,
+		body > div[style*="fixed"] div[style*="background:rgba(255,255,255,0.05)"] {
+			background: rgba(255, 255, 255, 0.04) !important;
+			border-color: rgba(255, 255, 255, 0.06) !important;
+		}
+
+		/* Buttons inside panel */
+		.vec3-demo-panel button,
+		body > div[style*="fixed"] button {
+			background: rgba(53, 200, 255, 0.08) !important;
+			border-color: rgba(53, 200, 255, 0.20) !important;
+			transition: background 120ms ease, border-color 120ms ease !important;
+		}
+
+		.vec3-demo-panel button:hover,
+		body > div[style*="fixed"] button:hover {
+			background: rgba(53, 200, 255, 0.16) !important;
+			border-color: rgba(53, 200, 255, 0.38) !important;
+		}
+
+		/* Selects and inputs inside panel */
+		.vec3-demo-panel select,
+		.vec3-demo-panel input[type="range"],
+		body > div[style*="fixed"] select,
+		body > div[style*="fixed"] input[type="range"] {
+			background: rgba(0, 0, 0, 0.20) !important;
+			border-color: rgba(255, 255, 255, 0.08) !important;
+		}
+
+		.vec3-demo-panel select:focus-visible,
+		body > div[style*="fixed"] select:focus-visible {
+			border-color: rgba(53, 200, 255, 0.45) !important;
+			box-shadow: 0 0 0 2px rgba(53, 200, 255, 0.10) !important;
+		}
+
+		/* Scrollbar inside panel */
+		.vec3-demo-panel::-webkit-scrollbar,
+		body > div[style*="fixed"]::-webkit-scrollbar {
+			width: 6px;
+			height: 6px;
+		}
+
+		.vec3-demo-panel::-webkit-scrollbar-thumb,
+		body > div[style*="fixed"]::-webkit-scrollbar-thumb {
+			background: rgba(255, 255, 255, 0.14);
+			border-radius: 999px;
+		}
+
+		.vec3-demo-panel::-webkit-scrollbar-track,
+		body > div[style*="fixed"]::-webkit-scrollbar-track {
+			background: transparent;
+		}
+
+		/* Section labels */
+		.vec3-demo-section,
+		.vec3-demo-panel div[style*="color:#7cc4ff"],
+		body > div[style*="fixed"] div[style*="color:#7cc4ff"] {
+			color: rgba(124, 196, 255, 0.90) !important;
+		}
+
+		/* Status line */
+		.vec3-demo-status,
+		.vec3-demo-panel div[style*="color:#8ea2b8"],
+		body > div[style*="fixed"] div[style*="color:#8ea2b8"] {
+			color: rgba(142, 162, 184, 0.85) !important;
+		}
+
+		/* Range slider track & thumb for transparent look */
+		.vec3-demo-panel input[type="range"]::-webkit-slider-runnable-track,
+		body > div[style*="fixed"] input[type="range"]::-webkit-slider-runnable-track {
+			background: rgba(255, 255, 255, 0.08) !important;
+			border-color: rgba(255, 255, 255, 0.04) !important;
+		}
+
+		.vec3-demo-panel input[type="range"]::-webkit-slider-thumb,
+		body > div[style*="fixed"] input[type="range"]::-webkit-slider-thumb {
+			background: rgba(224, 240, 255, 0.92) !important;
+			border-color: rgba(255, 255, 255, 0.30) !important;
+			box-shadow: 0 1px 6px rgba(0, 0, 0, 0.30) !important;
+		}
+
+		.vec3-demo-panel input[type="range"]::-moz-range-track,
+		body > div[style*="fixed"] input[type="range"]::-moz-range-track {
+			background: rgba(255, 255, 255, 0.08) !important;
+		}
+
+		.vec3-demo-panel input[type="range"]::-moz-range-thumb,
+		body > div[style*="fixed"] input[type="range"]::-moz-range-thumb {
+			background: rgba(224, 240, 255, 0.92) !important;
+			border-color: rgba(255, 255, 255, 0.30) !important;
+		}
+
+		/* ================================================================
+		   BOOT STATUS (small floating indicator)
+		   ================================================================ */
+		#boot-status {
+			position: fixed;
+			top: 12px;
+			left: 12px;
+			z-index: 99998;
+			max-width: min(92vw, 460px);
+			padding: 8px 12px;
+			border: 1px solid rgba(255, 255, 255, 0.08);
+			border-radius: 8px;
+			background: rgba(5, 8, 12, 0.35);
+			backdrop-filter: blur(6px) saturate(120%);
+			-webkit-backdrop-filter: blur(6px) saturate(120%);
+			color: rgba(142, 162, 184, 0.90);
+			font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			white-space: pre-wrap;
+			word-break: break-word;
+			transition: opacity 300ms ease;
+			pointer-events: none;
+		}
+
+		#boot-status.ready {
+			color: rgba(74, 222, 128, 0.90);
+			border-color: rgba(74, 222, 128, 0.30);
+		}
+
+		#boot-status.error {
+			color: rgba(255, 93, 115, 0.90);
+			border-color: rgba(255, 93, 115, 0.30);
+		}
+
+		#boot-status.hidden {
+			opacity: 0;
+		}
+
+		/* ================================================================
+		   NOSCRIPT / FALLBACK
+		   ================================================================ */
+		noscript {
+			display: grid;
+			place-items: center;
+			height: 100vh;
+			padding: 24px;
+			background: #05080c;
+			color: #ff5d73;
+			font: 14px/1.5 ui-sans-serif, system-ui, sans-serif;
+			text-align: center;
+		}
+
+		/* ================================================================
+		   RESPONSIVE
+		   ================================================================ */
+		@media (max-width: 640px) {
+			.vec3-demo-panel,
+			body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) {
+				top: auto !important;
+				bottom: 8px !important;
+				left: 8px !important;
+				right: 8px !important;
+				width: auto !important;
+				max-height: 42vh !important;
+				border-radius: 12px !important;
+			}
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			*,
+			*::before,
+			*::after {
+				animation-duration: 0.01ms !important;
+				animation-iteration-count: 1 !important;
+				transition-duration: 0.01ms !important;
+			}
+		}
+	</style>
+</head>
+
+<body>
+	<noscript>
+		This demo requires JavaScript and native ES module support.
+	</noscript>
+
+	<div id="app">
+		<div id="vec3-demo" class="vec3-demo vec3-demo-root">
+			<canvas
+				id="vec3-demo-canvas"
+				class="vec3-canvas vec3-canvas-layer webgl-canvas three-canvas"
+				tabindex="0"
+				aria-label="Vec3 demonstration canvas"
+			></canvas>
+		</div>
+	</div>
+
+	<!-- Boot status indicator -->
+	<div id="boot-status" role="status" aria-live="polite">
+		Initializing Three.js r185 host...
+	</div>
+
+	<!-- ================================================================
+	     THREE.JS r185 IMPORT MAP
+	     ================================================================ -->
+	<script type="importmap">
+	{
+		"imports": {
+			"three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+			"three/": "https://cdn.jsdelivr.net/npm/three@0.185.0/",
+			"three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.webgpu.js",
+			"three/tsl": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.tsl.js",
+			"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/",
+			"three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
+		}
+	}
+	</script>
+
+	<!-- ================================================================
+	     MODULE LOADER — no top-level await
+	     ================================================================ -->
+	<script type="module">
+		var statusEl = document.getElementById("boot-status");
+
+		function setStatus(msg, kind) {
+			if (!statusEl) { return; }
+			statusEl.textContent = msg;
+			statusEl.className = kind || "";
+		}
+
+		function hideStatus(delay) {
+			setTimeout(function () {
+				if (!statusEl) { return; }
+				statusEl.classList.add("hidden");
+				setTimeout(function () {
+					if (statusEl && statusEl.parentNode) {
+						statusEl.parentNode.removeChild(statusEl);
+					}
+					statusEl = null;
+				}, 350);
+			}, delay || 1400);
+		}
+
+		// Expose host context for the demo module
+		globalThis.__VEC3_DEMO_HOST__ = {
+			version: "native-browser-r185",
+			buildTooling: "none",
+			framework: "none",
+			mathProvider: "custom-gl-matrix-compatible",
+			container: document.getElementById("vec3-demo"),
+			canvas: document.getElementById("vec3-demo-canvas"),
+			started: false
+		};
+
+		setStatus("Loading ./003_vec3_demo.js ...");
+
+		import("./003_vec3_demo.js")
+			.then(function (moduleRef) {
+				setStatus("003_vec3_demo.js loaded successfully.", "ready");
+				var keys = moduleRef ? Object.keys(moduleRef).join(", ") : "(none)";
+				console.info("[HOST] Module loaded. Exports: " + keys);
+				hideStatus(1500);
+			})
+			.catch(function (err) {
+				console.error("[HOST] Fatal load error:", err);
+				var msg = (err && err.message) ? err.message : String(err);
+				setStatus("FAILED:\n" + msg, "error");
+			});
+	</script>
+</body>
+</html>

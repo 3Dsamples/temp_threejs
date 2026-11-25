@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<!-- ==========================================================================
+  file number : 019
+  full path name : src/particle_showcase.html
+  description : Dedicated single-module entry page for particle_showcase.js
+                ONLY. Boots straight into the PARTICLE THEATRE through a real
+                pre-flight console rather than a bare spinner:
+                  · live ambient particle field (Canvas2D, additive sprites,
+                    differential-rotation spiral disc, drifting camera) with
+                    its own permanently visible control region — density,
+                    spin, glow, camera depth, 4 palettes, drift, pause, reset
+                    — every one applied live to the field on screen.
+                  · genuine module manifest: all ten ./math/* modules are
+                    dynamically probed in parallel, each row reporting real
+                    LINKED / FAILED state and measured load time.
+                  · real capability read-out (WebGL2 / WebGL1+ANGLE / Canvas2D
+                    fallback, pixel ratio, threads, memory, pointer, motion).
+                  · the eight-act roster of the showcase, timestamped event
+                    log, copyable diagnostic report.
+                  · staged hand-over: auto-launch countdown (holdable), iris
+                    fade, preview loop cancelled and all console DOM removed
+                    so exactly one render loop survives.
+                  · graceful failure: precise fatal panel naming the module
+                    that failed, retry / reload / copy report.
+                No vite, no vue, no build step, no CDN request. demo2.css is
+                linked for shared tokens but the page is fully self-contained
+                without it.
+  best for : 3d graphics — launching the bitECS particle showcase (auto-cycling
+             acts, auto-randomization, SOA math replacing three.js r185) from
+             one artifact on Android mobile 64-bit WebView/Chrome or desktop,
+             with honest diagnostics and zero external requests.
+  license : MIT
+
+  topological hierarchy (dependencies first — this page is last):
+    src/math/002_vec2.js
+    src/math/003_vec3.js
+    src/math/004_vec4.js
+    src/math/005_mat2.js
+    src/math/006_mat3.js
+    src/math/007_mat4.js
+    src/math/008_quat.js
+    src/math/009_quat2.js
+    src/math/010_bitECS_core.js
+    src/math/011_bitECS_serialization.js   (optional at runtime)
+    src/particle_showcase.js               (017 — the only module booted)
+    src/demo2.css                          (015 — shared tokens, optional)
+    src/particle_showcase.html             (019 — THIS FILE)
+
+  usage : open src/particle_showcase.html
+=========================================================================== -->
+<html lang="en" data-ps-theme="theatre">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#06030c">
+<meta name="description" content="PARTICLE THEATRE — pre-flight console and launcher for the bitECS particle showcase. Eight auto-cycling acts, auto-randomization, SOA math replacing three.js r185.">
+<title>PARTICLE THEATRE · pre-flight console</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2306030c'/%3E%3Ccircle cx='10' cy='21' r='2.6' fill='%23ff5fd0'/%3E%3Ccircle cx='17' cy='11' r='1.9' fill='%23ffc44d'/%3E%3Ccircle cx='24' cy='20' r='3' fill='%2337e6ff'/%3E%3Ccircle cx='15' cy='25' r='1.4' fill='%23b6ff3d'/%3E%3C/svg%3E">
+
+<link rel="stylesheet" href="./demo2.css">
+
+<style>
+/* ==========================================================================
+   01. TOKENS — theatre palette (magenta / gold / cyan on aubergine void)
+   ========================================================================== */
+:root{
+  --void:#06030c; --void2:#0b0616;
+  --surface:rgba(20,10,32,.80); --surface2:rgba(32,15,48,.88); --surface3:rgba(46,20,66,.9);
+  --line:rgba(255,110,215,.18); --line2:rgba(255,110,215,.36);
+  --text:#f6ecff; --dim:#a98cc0; --faint:#6b5480;
+  --acc:#ff5fd0; --acc2:#ffc44d; --acc3:#37e6ff;
+  --accSoft:rgba(255,95,208,.20); --acc2Soft:rgba(255,196,77,.18); --acc3Soft:rgba(55,230,255,.18);
+  --ok:#b6ff3d; --warn:#ffd23d; --danger:#ff3d5e; --info:#9a5cff;
+  --r-s:7px; --r-m:11px; --r-l:17px;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Roboto Mono","Liberation Mono",monospace;
+  --disp:"Avenir Next","Segoe UI",system-ui,-apple-system,sans-serif;
+  --ease:cubic-bezier(.2,.9,.25,1); --pop:cubic-bezier(.2,.9,.3,1.25);
+  --bar:74px;
+}
+[data-ps-theme="ion"]{
+  --acc:#37e6ff; --acc2:#9a5cff; --acc3:#ff5fd0;
+  --accSoft:rgba(55,230,255,.20); --acc2Soft:rgba(154,92,255,.20); --acc3Soft:rgba(255,95,208,.18);
+  --line:rgba(120,180,255,.20); --line2:rgba(120,180,255,.38);
+  --void:#03060e; --void2:#060b18;
+  --surface:rgba(10,18,34,.80); --surface2:rgba(16,26,48,.88); --surface3:rgba(24,38,66,.9);
+  --text:#e8f4ff; --dim:#8aa4c4; --faint:#546a88;
+}
+[data-ps-theme="acid"]{
+  --acc:#b6ff3d; --acc2:#ffc44d; --acc3:#37e6ff;
+  --accSoft:rgba(182,255,61,.18); --acc2Soft:rgba(255,196,77,.18); --acc3Soft:rgba(55,230,255,.18);
+  --line:rgba(160,255,110,.20); --line2:rgba(160,255,110,.38);
+  --void:#04070a; --void2:#080f10;
+  --surface:rgba(12,22,18,.80); --surface2:rgba(18,32,26,.88); --surface3:rgba(26,44,34,.9);
+  --text:#eafff0; --dim:#8fb49c; --faint:#556e5e;
+}
+[data-ps-theme="rose"]{
+  --acc:#ff3d5e; --acc2:#ffc44d; --acc3:#ff5fd0;
+  --accSoft:rgba(255,61,94,.20); --acc2Soft:rgba(255,196,77,.18); --acc3Soft:rgba(255,95,208,.18);
+  --line:rgba(255,110,140,.20); --line2:rgba(255,110,140,.38);
+  --void:#0a0308; --void2:#12060e;
+  --surface:rgba(28,10,20,.80); --surface2:rgba(42,16,30,.88); --surface3:rgba(58,22,40,.9);
+  --text:#ffeef4; --dim:#c090a4; --faint:#7a5666;
+}
+
+/* ==========================================================================
+   02. BASE
+   ========================================================================== */
+html,body{margin:0;padding:0;height:100%;background:var(--void);overscroll-behavior:none}
+body{overflow:hidden;color:var(--text);font:13px/1.5 var(--mono);-webkit-font-smoothing:antialiased;
+  -webkit-tap-highlight-color:transparent}
+::selection{background:var(--accSoft);color:var(--text)}
+:focus-visible{outline:2px solid var(--acc3);outline-offset:2px;border-radius:var(--r-s)}
+button{font:inherit;color:inherit}
+
+/* ==========================================================================
+   03. BACKDROP LAYERS
+   ========================================================================== */
+#ps-field{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0;
+  transition:opacity .6s ease}
+#ps-field.gone{opacity:0}
+.ps-aurora{position:fixed;inset:-20%;z-index:1;pointer-events:none;opacity:.85;
+  background:
+    radial-gradient(38% 44% at 18% 22%, var(--accSoft), transparent 62%),
+    radial-gradient(34% 40% at 82% 30%, var(--acc3Soft), transparent 64%),
+    radial-gradient(46% 48% at 62% 88%, var(--acc2Soft), transparent 66%),
+    radial-gradient(30% 34% at 34% 74%, rgba(154,92,255,.16), transparent 68%);
+  filter:blur(28px);animation:psDrift 34s ease-in-out infinite alternate;transition:opacity .6s ease}
+.ps-grain{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.055;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  transition:opacity .6s ease}
+.ps-vignette{position:fixed;inset:0;z-index:3;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 46%, transparent 42%, rgba(2,1,5,.62) 100%);
+  transition:opacity .6s ease}
+.ps-aurora.gone,.ps-grain.gone,.ps-vignette.gone{opacity:0}
+@keyframes psDrift{
+  0%{transform:translate3d(-2%,-1%,0) scale(1)}
+  50%{transform:translate3d(2%,2%,0) scale(1.06)}
+  100%{transform:translate3d(-1%,3%,0) scale(1.02)}
+}
+
+/* ==========================================================================
+   04. CONSOLE SHELL
+   ========================================================================== */
+#ps-console{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;
+  transition:opacity .55s var(--ease), transform .55s var(--ease), filter .55s var(--ease)}
+#ps-console.gone{opacity:0;transform:scale(1.035);filter:blur(9px);pointer-events:none}
+.ps-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:26px 26px 18px;
+  scrollbar-width:thin;scrollbar-color:var(--acc) rgba(255,110,215,.07)}
+.ps-scroll::-webkit-scrollbar{width:11px}
+.ps-scroll::-webkit-scrollbar-track{background:linear-gradient(180deg,rgba(255,110,215,.05),rgba(255,110,215,.12));border-radius:6px}
+.ps-scroll::-webkit-scrollbar-thumb{background:linear-gradient(180deg,var(--acc),var(--acc2));
+  border-radius:6px;border:2px solid rgba(6,3,12,.85)}
+.ps-scroll::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,var(--acc2),var(--acc3))}
+.ps-wrap{width:min(1280px,100%);margin:0 auto}
+
+/* head ------------------------------------------------------------------- */
+.ps-head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap;
+  animation:psDrop .7s var(--ease) both}
+.ps-eyebrow{display:flex;align-items:center;gap:9px;font-size:9.5px;letter-spacing:.34em;
+  color:var(--dim);margin-bottom:12px}
+.ps-dot{width:7px;height:7px;border-radius:50%;background:var(--acc);
+  box-shadow:0 0 12px var(--acc);animation:psPulse 1.7s ease-in-out infinite}
+.ps-title{font-family:var(--disp);font-size:clamp(32px,6.6vw,72px);font-weight:800;
+  letter-spacing:.14em;line-height:1;margin:0;
+  background:linear-gradient(100deg,var(--acc) 0%,var(--acc2) 48%,var(--acc3) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.ps-tag{margin-top:14px;max-width:60ch;font-size:11.5px;line-height:1.95;color:var(--dim);
+  letter-spacing:.05em}
+.ps-tag b{color:var(--text);font-weight:600}
+.ps-headside{margin-left:auto;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.ps-chip{font-size:9.5px;letter-spacing:.16em;padding:5px 12px;border-radius:99px;
+  border:1px solid var(--line);color:var(--dim);background:var(--surface);white-space:nowrap}
+.ps-chip b{color:var(--acc3);font-weight:700}
+.ps-chip.ok{color:var(--ok);border-color:rgba(182,255,61,.34)}
+.ps-chip.bad{color:var(--danger);border-color:rgba(255,61,94,.4)}
+
+/* grid ------------------------------------------------------------------- */
+.ps-grid{display:grid;grid-template-columns:1.06fr .94fr;gap:18px;margin-top:26px}
+.ps-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-l);
+  padding:18px 19px;backdrop-filter:blur(11px);-webkit-backdrop-filter:blur(11px);
+  position:relative;overflow:hidden;animation:psRise .7s var(--ease) both}
+.ps-card::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--acc),var(--acc2),var(--acc3),transparent);opacity:.75}
+.ps-card:nth-of-type(2){animation-delay:.08s}
+.ps-card:nth-of-type(3){animation-delay:.16s}
+.ps-card:nth-of-type(4){animation-delay:.24s}
+.ps-sec{display:flex;align-items:center;gap:10px;font-size:9.5px;letter-spacing:.3em;
+  color:var(--dim);margin:0 0 14px}
+.ps-sec i{font-style:normal;color:var(--acc);font-weight:700}
+.ps-sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line2),transparent)}
+.ps-col{display:flex;flex-direction:column;gap:18px;min-width:0}
+
+/* ==========================================================================
+   05. LIVE PREVIEW CONTROLS
+   ========================================================================== */
+.ps-row{margin:11px 0}
+.ps-row label{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:10.5px;letter-spacing:.07em;margin-bottom:5px;color:var(--text)}
+.ps-row label output{color:var(--acc2);font-weight:700;font-size:11px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;cursor:pointer;display:block}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:3px;
+  background:linear-gradient(90deg,var(--acc),var(--acc2),var(--acc3));box-shadow:0 0 9px var(--accSoft)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;margin-top:-5.5px;
+  border-radius:50%;background:var(--void2);border:2px solid var(--acc3);box-shadow:0 0 11px var(--acc3);
+  transition:transform .15s var(--pop)}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.28)}
+input[type=range]::-webkit-slider-thumb:active{transform:scale(1.42)}
+input[type=range]::-moz-range-track{height:4px;border-radius:3px;
+  background:linear-gradient(90deg,var(--acc),var(--acc2),var(--acc3))}
+input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;
+  background:var(--void2);border:2px solid var(--acc3);box-shadow:0 0 11px var(--acc3)}
+
+.ps-swatches{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.ps-sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0;
+  transition:transform .16s var(--pop),border-color .16s ease,box-shadow .16s ease;touch-action:manipulation}
+.ps-sw:hover{transform:scale(1.16)}
+.ps-sw.on{border-color:var(--text);box-shadow:0 0 15px rgba(255,255,255,.28);transform:scale(1.1)}
+.ps-sw[data-p="theatre"]{background:conic-gradient(from 210deg,#ff5fd0,#ffc44d,#37e6ff,#9a5cff,#ff5fd0)}
+.ps-sw[data-p="ion"]{background:conic-gradient(from 210deg,#37e6ff,#9a5cff,#ff5fd0,#4da3ff,#37e6ff)}
+.ps-sw[data-p="acid"]{background:conic-gradient(from 210deg,#b6ff3d,#ffc44d,#37e6ff,#3de6a0,#b6ff3d)}
+.ps-sw[data-p="rose"]{background:conic-gradient(from 210deg,#ff3d5e,#ffc44d,#ff5fd0,#ff8a3d,#ff3d5e)}
+
+.ps-tog{display:flex;align-items:center;justify-content:space-between;padding:8px 0;
+  font-size:11px;letter-spacing:.06em;cursor:pointer;user-select:none;-webkit-user-select:none}
+.ps-tog .sw{width:38px;height:20px;border-radius:99px;background:rgba(255,110,215,.12);
+  border:1px solid var(--line);position:relative;transition:all .2s ease;flex:0 0 38px}
+.ps-tog .sw::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+  background:var(--dim);transition:all .2s var(--pop)}
+.ps-tog.on .sw{background:linear-gradient(90deg,var(--acc),var(--acc2));border-color:transparent;
+  box-shadow:0 0 13px var(--accSoft)}
+.ps-tog.on .sw::after{left:20px;background:var(--void)}
+
+.ps-btns{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
+.ps-btn{padding:11px 8px;border-radius:var(--r-m);border:1px solid var(--line);cursor:pointer;
+  background:linear-gradient(180deg,var(--surface3),var(--surface2));color:var(--text);
+  font-size:10.5px;letter-spacing:.13em;text-align:center;transition:all .17s ease;touch-action:manipulation}
+.ps-btn:hover{border-color:var(--acc);color:var(--acc);box-shadow:0 0 16px var(--accSoft);transform:translateY(-1px)}
+.ps-btn:active{transform:none}
+.ps-btn.wide{grid-column:1/-1}
+.ps-btn[disabled]{opacity:.45;pointer-events:none}
+
+/* ==========================================================================
+   06. MANIFEST / CAPS / ACTS / LOG
+   ========================================================================== */
+.ps-mod{display:grid;grid-template-columns:34px 1fr auto auto;gap:10px;align-items:center;
+  padding:6px 8px;border-radius:var(--r-s);font-size:10.5px;transition:background .16s ease}
+.ps-mod:hover{background:rgba(255,110,215,.06)}
+.ps-mod .id{color:var(--faint);letter-spacing:.1em}
+.ps-mod .nm{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ps-mod .role{font-size:8.5px;letter-spacing:.16em;color:var(--faint)}
+.ps-mod .st{font-size:8.5px;letter-spacing:.14em;padding:3px 8px;border-radius:99px;
+  border:1px solid var(--line);color:var(--dim);min-width:74px;text-align:center}
+.ps-mod .st.wait{color:var(--acc2);border-color:rgba(255,196,77,.3);animation:psPulse 1.3s ease-in-out infinite}
+.ps-mod .st.ok{color:var(--ok);border-color:rgba(182,255,61,.34);box-shadow:0 0 10px rgba(182,255,61,.12)}
+.ps-mod .st.bad{color:var(--danger);border-color:rgba(255,61,94,.42);box-shadow:0 0 10px rgba(255,61,94,.14)}
+
+.ps-caps{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:9px}
+.ps-cap{border:1px solid var(--line);border-radius:var(--r-m);padding:9px 11px;background:rgba(255,110,215,.04)}
+.ps-cap span{display:block;font-size:8.5px;letter-spacing:.2em;color:var(--faint);margin-bottom:4px}
+.ps-cap b{font-size:11.5px;color:var(--acc3);font-weight:700;letter-spacing:.04em;word-break:break-word}
+
+.ps-act{display:grid;grid-template-columns:26px 1fr;gap:11px;padding:7px 6px;border-radius:var(--r-s);
+  transition:transform .16s ease,background .16s ease}
+.ps-act:hover{transform:translateX(4px);background:rgba(255,110,215,.06)}
+.ps-act .n{font-size:9px;letter-spacing:.08em;color:var(--acc2);border:1px solid var(--line2);
+  border-radius:6px;height:20px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+.ps-act .t{font-size:10.5px;letter-spacing:.13em;color:var(--text)}
+.ps-act .d{font-size:9.5px;line-height:1.65;color:var(--dim);margin-top:3px;letter-spacing:.02em}
+
+.ps-log{max-height:132px;overflow-y:auto;font-size:9.5px;line-height:1.85;color:var(--dim);
+  background:rgba(3,1,7,.5);border:1px solid var(--line);border-radius:var(--r-m);padding:9px 11px;
+  scrollbar-width:thin;scrollbar-color:var(--acc3) rgba(55,230,255,.06)}
+.ps-log::-webkit-scrollbar{width:9px}
+.ps-log::-webkit-scrollbar-track{background:rgba(55,230,255,.06);border-radius:5px}
+.ps-log::-webkit-scrollbar-thumb{background:linear-gradient(180deg,var(--acc3),var(--acc));border-radius:5px;
+  border:2px solid rgba(3,1,7,.8)}
+.ps-log div{white-space:pre-wrap;word-break:break-word}
+.ps-log .t{color:var(--faint)}
+.ps-log .g{color:var(--ok)} .ps-log .w{color:var(--warn)} .ps-log .e{color:var(--danger)}
+
+.ps-foot{margin-top:20px;padding-bottom:6px;font-size:9px;letter-spacing:.16em;color:var(--faint);
+  line-height:2;text-align:center}
+.ps-foot b{color:var(--dim);font-weight:600}
+
+/* ==========================================================================
+   07. ACTION BAR (primary action always reachable)
+   ========================================================================== */
+.ps-action{flex:0 0 var(--bar);height:var(--bar);display:flex;align-items:center;gap:16px;
+  padding:0 26px;background:linear-gradient(180deg,rgba(8,3,16,.55),rgba(8,3,16,.94));
+  border-top:1px solid var(--line);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  position:relative;z-index:12}
+.ps-action::before{content:"";position:absolute;left:0;top:0;height:2px;width:var(--p,0%);
+  background:linear-gradient(90deg,var(--acc),var(--acc2),var(--acc3));
+  box-shadow:0 0 12px var(--acc2);transition:width .3s ease}
+.ps-status{min-width:0;flex:1}
+.ps-status .s1{font-size:10.5px;letter-spacing:.2em;color:var(--acc2);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.ps-status .s2{font-size:9px;letter-spacing:.14em;color:var(--faint);margin-top:4px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.ps-hold{padding:10px 15px;border-radius:99px;border:1px solid var(--line);background:var(--surface2);
+  color:var(--dim);font-size:10px;letter-spacing:.18em;cursor:pointer;transition:all .17s ease;
+  white-space:nowrap;touch-action:manipulation}
+.ps-hold:hover{border-color:var(--acc2);color:var(--acc2)}
+.ps-hold.on{color:var(--warn);border-color:rgba(255,210,61,.4)}
+.ps-enter{padding:14px 30px;border-radius:var(--r-m);cursor:pointer;font-size:11.5px;letter-spacing:.24em;
+  border:1px solid var(--line2);color:var(--void);font-weight:700;white-space:nowrap;
+  background:linear-gradient(100deg,var(--acc),var(--acc2) 55%,var(--acc3));
+  box-shadow:0 0 26px var(--accSoft);transition:all .18s ease;touch-action:manipulation}
+.ps-enter:hover{box-shadow:0 0 34px var(--accSoft),0 0 60px var(--acc2Soft);transform:translateY(-2px)}
+.ps-enter:active{transform:none}
+.ps-enter[disabled]{opacity:.55;pointer-events:none;filter:saturate(.5)}
+
+/* ==========================================================================
+   08. TOASTS / FATAL / PILLS
+   ========================================================================== */
+#ps-toasts{position:fixed;left:22px;bottom:calc(var(--bar) + 16px);z-index:40;display:flex;
+  flex-direction:column;gap:8px;pointer-events:none;max-width:min(340px,74vw)}
+.ps-toast{padding:9px 14px;font-size:10.5px;letter-spacing:.06em;background:rgba(10,4,18,.94);
+  border:1px solid var(--line);border-left:3px solid var(--acc3);border-radius:var(--r-m);
+  box-shadow:0 8px 28px rgba(0,0,0,.55);animation:psToast .3s var(--pop) both}
+.ps-toast.ok{border-left-color:var(--ok)} .ps-toast.warn{border-left-color:var(--warn)}
+.ps-toast.err{border-left-color:var(--danger)}
+.ps-toast.out{animation:psToastOut .3s both}
+
+#ps-fatal{position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;
+  padding:22px;background:rgba(3,1,7,.94);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#ps-fatal.show{display:flex}
+.ps-fbox{width:min(620px,100%);max-height:86vh;overflow-y:auto;border:1px solid rgba(255,61,94,.42);
+  border-left:3px solid var(--danger);border-radius:var(--r-l);background:var(--surface2);
+  padding:26px 28px;display:flex;flex-direction:column;gap:15px;
+  scrollbar-width:thin;scrollbar-color:var(--danger) rgba(255,61,94,.08)}
+.ps-fbox::-webkit-scrollbar{width:10px}
+.ps-fbox::-webkit-scrollbar-track{background:rgba(255,61,94,.08);border-radius:5px}
+.ps-fbox::-webkit-scrollbar-thumb{background:linear-gradient(180deg,var(--danger),var(--acc2));border-radius:5px;
+  border:2px solid rgba(3,1,7,.85)}
+.ps-fbox h2{margin:0;font-family:var(--disp);font-size:15px;letter-spacing:.22em;color:var(--danger)}
+.ps-fbox p{margin:0;font-size:11px;line-height:1.95;color:var(--text);letter-spacing:.03em}
+.ps-fbox code{color:var(--acc2);background:var(--acc2Soft);padding:1px 6px;border-radius:4px}
+.ps-fbox ul{margin:0;padding-left:18px;font-size:10.5px;line-height:1.95;color:var(--dim)}
+.ps-fbox .ps-btns{margin-top:2px}
+
+#ps-pills{position:fixed;right:322px;bottom:14px;z-index:45;display:none;gap:8px}
+#ps-pills.show{display:flex}
+.ps-pill{padding:7px 15px;border-radius:99px;border:1px solid var(--line);background:rgba(10,4,18,.86);
+  color:var(--acc2);font-size:9.5px;letter-spacing:.2em;cursor:pointer;user-select:none;
+  -webkit-user-select:none;touch-action:manipulation;backdrop-filter:blur(7px);
+  -webkit-backdrop-filter:blur(7px);transition:all .17s ease;white-space:nowrap}
+.ps-pill:hover{border-color:var(--acc2);box-shadow:0 0 15px var(--acc2Soft)}
+
+/* ==========================================================================
+   09. ANIMATION
+   ========================================================================== */
+@keyframes psDrop{from{transform:translateY(-22px);opacity:0}to{transform:none;opacity:1}}
+@keyframes psRise{from{transform:translateY(26px);opacity:0}to{transform:none;opacity:1}}
+@keyframes psPulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes psToast{from{transform:translateX(-22px);opacity:0}to{transform:none;opacity:1}}
+@keyframes psToastOut{to{transform:translateX(-22px);opacity:0}}
+
+/* ==========================================================================
+   10. RESPONSIVE
+   ========================================================================== */
+@media (max-width:1080px){
+  .ps-grid{grid-template-columns:1fr}
+  #ps-pills{right:322px}
+}
+@media (max-width:860px){
+  .ps-scroll{padding:20px 16px 14px}
+  .ps-action{padding:0 16px;gap:10px}
+  .ps-enter{padding:13px 18px;letter-spacing:.16em;font-size:10.5px}
+  .ps-hold{padding:9px 12px;letter-spacing:.12em}
+  .ps-status .s2{display:none}
+  #ps-pills{right:14px;bottom:calc(40vh + 14px)}
+  #ps-toasts{left:14px;max-width:70vw}
+  .ps-headside{margin-left:0;flex-direction:row;flex-wrap:wrap;align-items:flex-start}
+}
+@media (max-width:480px){
+  .ps-btns{grid-template-columns:1fr}
+  .ps-title{letter-spacing:.09em}
+  .ps-enter{padding:12px 14px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important}
+  .ps-aurora{animation:none}
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="ps-field" aria-hidden="true"></canvas>
+<div class="ps-aurora" aria-hidden="true"></div>
+<div class="ps-grain" aria-hidden="true"></div>
+<div class="ps-vignette" aria-hidden="true"></div>
+
+<main id="ps-console">
+  <div class="ps-scroll">
+    <div class="ps-wrap">
+
+      <header class="ps-head">
+        <div>
+          <div class="ps-eyebrow"><span class="ps-dot"></span>MODULE 017 · bitECS PARTICLE SHOWCASE · PRE-FLIGHT</div>
+          <h1 class="ps-title">PARTICLE&nbsp;THEATRE</h1>
+          <p class="ps-tag">
+            Eighty thousand particles live in a <b>bitECS</b> world and perform eight choreographed
+            acts with auto-cycle and auto-randomization. Every vector, matrix, quaternion and
+            dual-quaternion comes from the <b>./math/*</b> SOA stack — a full replacement for
+            three.js r185. Below: a live ambient field you can steer, and a real link report
+            for all ten modules before the curtain rises.
+          </p>
+        </div>
+        <div class="ps-headside">
+          <span class="ps-chip" id="ps-chip-gl">RENDERER <b>probing…</b></span>
+          <span class="ps-chip" id="ps-chip-stack">STACK <b>probing…</b></span>
+          <span class="ps-chip" id="ps-chip-count">FIELD <b>—</b></span>
+        </div>
+      </header>
+
+      <div class="ps-grid">
+
+        <!-- LEFT: live field controls ------------------------------------- -->
+        <div class="ps-col">
+          <section class="ps-card">
+            <h2 class="ps-sec"><i>A</i> AMBIENT FIELD · LIVE CONTROLS</h2>
+
+            <div class="ps-row">
+              <label for="ps-density">PARTICLE DENSITY <output id="ps-density-o">1200</output></label>
+              <input id="ps-density" type="range" min="300" max="2600" step="100" value="1200" aria-label="particle density">
+            </div>
+            <div class="ps-row">
+              <label for="ps-spin">DISC SPIN <output id="ps-spin-o">1.00×</output></label>
+              <input id="ps-spin" type="range" min="0" max="2.4" step="0.05" value="1" aria-label="disc spin">
+            </div>
+            <div class="ps-row">
+              <label for="ps-glow">GLOW <output id="ps-glow-o">1.00</output></label>
+              <input id="ps-glow" type="range" min="0.3" max="2.2" step="0.05" value="1" aria-label="glow">
+            </div>
+            <div class="ps-row">
+              <label for="ps-depth">CAMERA DEPTH <output id="ps-depth-o">86</output></label>
+              <input id="ps-depth" type="range" min="44" max="150" step="1" value="86" aria-label="camera depth">
+            </div>
+
+            <div class="ps-row">
+              <label>CONSOLE PALETTE</label>
+              <div class="ps-swatches" id="ps-swatches"></div>
+            </div>
+
+            <div class="ps-tog on" id="ps-drift" role="switch" aria-checked="true" tabindex="0">
+              <span>CAMERA DRIFT</span><span class="sw"></span>
+            </div>
+
+            <div class="ps-btns">
+              <button class="ps-btn" id="ps-pause" type="button">⏸ PAUSE FIELD</button>
+              <button class="ps-btn" id="ps-reset" type="button">↺ RESET FIELD</button>
+            </div>
+          </section>
+
+          <section class="ps-card">
+            <h2 class="ps-sec"><i>B</i> THE EIGHT ACTS</h2>
+            <div id="ps-acts"></div>
+          </section>
+        </div>
+
+        <!-- RIGHT: manifest ----------------------------------------------- -->
+        <div class="ps-col">
+          <section class="ps-card">
+            <h2 class="ps-sec"><i>C</i> MODULE MANIFEST · LIVE PROBE</h2>
+            <div id="ps-stack"></div>
+            <div class="ps-btns">
+              <button class="ps-btn wide" id="ps-copy" type="button">⧉ COPY DIAGNOSTIC REPORT</button>
+            </div>
+          </section>
+
+          <section class="ps-card">
+            <h2 class="ps-sec"><i>D</i> DEVICE CAPABILITIES</h2>
+            <div class="ps-caps" id="ps-caps"></div>
+          </section>
+
+          <section class="ps-card">
+            <h2 class="ps-sec"><i>E</i> EVENT LOG</h2>
+            <div class="ps-log" id="ps-log" role="status" aria-live="polite"></div>
+          </section>
+        </div>
+      </div>
+
+      <div class="ps-foot">
+        <b>002–009</b> SOA MATH · <b>010</b> bitECS CORE · <b>011</b> SERIALIZATION ·
+        <b>017</b> PARTICLE SHOWCASE · <b>019</b> THIS CONSOLE<br>
+        NATIVE ES MODULES · NO BUILD STEP · NO CDN · NO SERVER-SIDE CODE
+      </div>
+    </div>
+  </div>
+
+  <div class="ps-action" id="ps-action">
+    <div class="ps-status">
+      <div class="s1" id="ps-status">INITIALISING CONSOLE</div>
+      <div class="s2" id="ps-substatus">probing local module graph…</div>
+    </div>
+    <button class="ps-hold" id="ps-hold" type="button">HOLD</button>
+    <button class="ps-enter" id="ps-enter" type="button">▶ ENTER THE THEATRE</button>
+  </div>
+</main>
+
+<div id="ps-toasts"></div>
+
+<div id="ps-fatal">
+  <div class="ps-fbox">
+    <h2>SHOWCASE COULD NOT START</h2>
+    <p id="ps-fatal-msg"></p>
+    <ul id="ps-fatal-list"></ul>
+    <p>
+      <code>particle_showcase.js</code> is a native ES module importing <code>./math/*</code>.
+      Some browsers block local module imports from <code>file://</code>. Open the
+      <code>src/</code> folder from any environment with local module access — an Android
+      WebView with file access enabled, or any static file server pointed at <code>src/</code>.
+    </p>
+    <div class="ps-btns">
+      <button class="ps-btn" id="ps-retry" type="button">↻ TRY LAUNCH AGAIN</button>
+      <button class="ps-btn" id="ps-reload" type="button">⟲ RELOAD CONSOLE</button>
+      <button class="ps-btn wide" id="ps-fcopy" type="button">⧉ COPY DIAGNOSTIC REPORT</button>
+    </div>
+  </div>
+</div>
+
+<div id="ps-pills">
+  <button class="ps-pill" id="ps-full" type="button">⛶ FULLSCREEN</button>
+  <button class="ps-pill" id="ps-back" type="button">◂ CONSOLE · ESC</button>
+</div>
+
+<noscript>
+  <div style="position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;
+    background:#06030c;color:#f6ecff;font-family:monospace;padding:24px;text-align:center">
+    JavaScript is required to run the PARTICLE THEATRE showcase.
+  </div>
+</noscript>
+
+<script type="module">
+/* ==========================================================================
+   01. DATA
+   ========================================================================== */
+const SHOWCASE = "./particle_showcase.js";
+
+const MODULES = [
+  { id: "002", name: "vec2",                 file: "./math/002_vec2.js",                 role: "CORE" },
+  { id: "003", name: "vec3",                 file: "./math/003_vec3.js",                 role: "CORE" },
+  { id: "004", name: "vec4",                 file: "./math/004_vec4.js",                 role: "CORE" },
+  { id: "005", name: "mat2",                 file: "./math/005_mat2.js",                 role: "CORE" },
+  { id: "006", name: "mat3",                 file: "./math/006_mat3.js",                 role: "CORE" },
+  { id: "007", name: "mat4",                 file: "./math/007_mat4.js",                 role: "CORE" },
+  { id: "008", name: "quat",                 file: "./math/008_quat.js",                 role: "CORE" },
+  { id: "009", name: "quat2",                file: "./math/009_quat2.js",                role: "CORE" },
+  { id: "010", name: "bitECS core",          file: "./math/010_bitECS_core.js",          role: "ENGINE" },
+  { id: "011", name: "serialization",        file: "./math/011_bitECS_serialization.js", role: "OPTIONAL" }
+];
+
+const ACTS = [
+  ["ORBITAL GALAXY",   "Differential-rotation disc with radial breathing and plane damping."],
+  ["PLASMA FOUNTAINS", "Three ballistic emitters, parametric arcs, hot-to-cool velocity fade."],
+  ["CYCLONE VORTEX",   "Tornado column: tangential spin, updraft, vertical recycle."],
+  ["WAVE LATTICE",     "Triple-sine ocean sheet resolved over a fixed particle lattice."],
+  ["ATTRACTOR FLOCK",  "bitECS spring system drives 20k drones around three moving lures."],
+  ["MORPH FORMATIONS", "Sphere / torus / knot / cube / disc inside a slerped quaternion frame."],
+  ["STORM FRONT",      "Trig turbulence field with lightning exposure flashes and crackle."],
+  ["COMET ENTOURAGE",  "Five dual-quaternion Kepler comets with glowing trails and retinues."]
+];
+
+const PALETTES = {
+  theatre: [[255, 95, 208], [255, 196, 77], [55, 230, 255], [154, 92, 255]],
+  ion:     [[55, 230, 255], [154, 92, 255], [255, 95, 208], [77, 163, 255]],
+  acid:    [[182, 255, 61], [255, 196, 77], [55, 230, 255], [61, 230, 160]],
+  rose:    [[255, 61, 94],  [255, 196, 77], [255, 95, 208], [255, 138, 61]]
+};
+const PAL_NAMES = { theatre: "Theatre", ion: "Ion", acid: "Acid", rose: "Rose" };
+
+const DEFAULTS = { density: 1200, spin: 1, glow: 1, depth: 86, drift: true, palette: "theatre", autoLaunch: true };
+const S = Object.assign({}, DEFAULTS);
+
+const state = { launching: false, launched: false, held: false, probesDone: 0, failed: [], caps: {}, t0: performance.now() };
+const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* persisted preferences (guarded — storage can throw in sandboxes) */
+try {
+  const raw = localStorage.getItem("ps-console-prefs");
+  if (raw) {
+    const p = JSON.parse(raw);
+    if (p && typeof p === "object") {
+      if (PALETTES[p.palette]) { S.palette = p.palette; }
+      if (typeof p.autoLaunch === "boolean") { S.autoLaunch = p.autoLaunch; }
+    }
+  }
+} catch (e) { /* ignore */ }
+function savePrefs() {
+  try { localStorage.setItem("ps-console-prefs", JSON.stringify({ palette: S.palette, autoLaunch: S.autoLaunch })); }
+  catch (e) { /* ignore */ }
+}
+if (reduceMotion) { S.spin = 0.35; S.drift = false; }
+
+/* ==========================================================================
+   02. DOM HELPERS
+   ========================================================================== */
+const $ = id => document.getElementById(id);
+const consoleEl = $("ps-console"), actionEl = $("ps-action"), enterBtn = $("ps-enter"), holdBtn = $("ps-hold");
+const statusEl = $("ps-status"), subEl = $("ps-substatus"), logEl = $("ps-log"), toastsEl = $("ps-toasts");
+
+function setStatus(a, b) { statusEl.textContent = a; if (b !== undefined) { subEl.textContent = b; } }
+function setProgress(p) { actionEl.style.setProperty("--p", Math.max(0, Math.min(100, p)) + "%"); }
+function log(msg, kind) {
+  const t = ((performance.now() - state.t0) / 1000).toFixed(2).padStart(6, "0");
+  const row = document.createElement("div");
+  row.innerHTML = '<span class="t">' + t + 's</span>  <span class="' + (kind || "") + '">' +
+    String(msg).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])) + "</span>";
+  logEl.appendChild(row);
+  while (logEl.childElementCount > 70) { logEl.removeChild(logEl.firstChild); }
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function toast(msg, kind) {
+  const el = document.createElement("div");
+  el.className = "ps-toast " + (kind || "");
+  el.textContent = msg;
+  toastsEl.appendChild(el);
+  setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 320); }, 2500);
+}
+
+/* ==========================================================================
+   03. AMBIENT PARTICLE FIELD (single rAF, additive sprites, zero deps)
+   ========================================================================== */
+const field = {
+  cv: $("ps-field"), ctx: null, dpr: 1, W: 2, H: 2,
+  n: 0, fx: null, fy: null, fz: null, fr: null, fw: null, fs: null, fc: null,
+  sprites: [], raf: 0, last: 0, t: 0, dead: false, dirty: true, yaw: 0.6
+};
+field.ctx = field.cv.getContext("2d", { alpha: true });
+
+function prng(seed) {
+  let a = seed | 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function fieldAlloc(n) {
+  const r = prng(9182736);
+  field.n = n;
+  field.fx = new Float32Array(n); field.fy = new Float32Array(n); field.fz = new Float32Array(n);
+  field.fr = new Float32Array(n); field.fw = new Float32Array(n); field.fs = new Float32Array(n);
+  field.fc = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const arm = i % 3;
+    const rad = 5 + Math.pow(r(), 0.62) * 38;
+    const ang = arm * (Math.PI * 2 / 3) + rad * 0.20 + (r() - 0.5) * 0.6;
+    field.fx[i] = Math.cos(ang) * rad;
+    field.fz[i] = Math.sin(ang) * rad;
+    field.fy[i] = (r() - 0.5) * 3.4 * Math.max(0.15, 1 - rad / 60);
+    field.fr[i] = rad;
+    field.fw[i] = 24 / (Math.pow(rad, 1.32) + 10);
+    field.fs[i] = (i % 97 === 0) ? (2.2 + r() * 1.4) : (0.55 + r() * 1.35);
+    field.fc[i] = (i % 97 === 0) ? 4 : (i % 4);
+  }
+  field.dirty = true;
+  const chip = $("ps-chip-count");
+  chip.innerHTML = "FIELD <b>" + n.toLocaleString() + "</b>";
+}
+
+function fieldSprites() {
+  const pal = PALETTES[S.palette];
+  const cols = pal.concat([[255, 246, 235]]);
+  field.sprites = cols.map(c => {
+    const s = document.createElement("canvas");
+    s.width = 64; s.height = 64;
+    const g = s.getContext("2d");
+    const rg = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    const rgb = c[0] + "," + c[1] + "," + c[2];
+    rg.addColorStop(0.00, "rgba(" + rgb + ",1)");
+    rg.addColorStop(0.18, "rgba(" + rgb + ",0.72)");
+    rg.addColorStop(0.46, "rgba(" + rgb + ",0.20)");
+    rg.addColorStop(1.00, "rgba(" + rgb + ",0)");
+    g.fillStyle = rg; g.fillRect(0, 0, 64, 64);
+    return s;
+  });
+  field.dirty = true;
+}
+
+function fieldResize() {
+  field.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  field.W = Math.max(2, window.innerWidth);
+  field.H = Math.max(2, window.innerHeight);
+  field.cv.width = Math.floor(field.W * field.dpr);
+  field.cv.height = Math.floor(field.H * field.dpr);
+  field.dirty = true;
+}
+
+function fieldFrame(now) {
+  if (field.dead) { return; }
+  field.raf = requestAnimationFrame(fieldFrame);
+  now *= 0.001;
+  const dt = Math.min(0.05, now - field.last || 0.016);
+  field.last = now;
+  if (!S.paused) { field.t += dt; if (S.drift) { field.yaw += dt * 0.055; } }
+  else if (!field.dirty) { return; }
+  field.dirty = false;
+
+  const t = field.t, ctx = field.ctx, W = field.W, H = field.H;
+  ctx.setTransform(field.dpr, 0, 0, field.dpr, 0, 0);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+  ctx.clearRect(0, 0, W, H);
+  ctx.globalCompositeOperation = "lighter";
+
+  /* camera basis (target = origin) */
+  const pitch = 0.36 + Math.sin(t * 0.11) * 0.055;
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const cy = Math.cos(field.yaw), sy = Math.sin(field.yaw);
+  const d = S.depth;
+  const ex = d * cp * sy, ey = d * sp, ez = d * cp * cy;
+  let fx = -ex, fy = -ey, fz = -ez;
+  const fl = Math.hypot(fx, fy, fz) || 1; fx /= fl; fy /= fl; fz /= fl;
+  let rx = fy * 0 - fz * 1, ry = fz * 0 - fx * 0, rz = fx * 1 - fy * 0;
+  const rl = Math.hypot(rx, ry, rz) || 1; rx /= rl; ry /= rl; rz /= rl;
+  const ux = ry * fz - rz * fy, uy = rz * fx - rx * fz, uz = rx * fy - ry * fx;
+  const focal = (H * 0.5) / Math.tan(55 * Math.PI / 360);
+  const hw = W * 0.5, hh = H * 0.5;
+
+  const px = field.fx, py = field.fy, pz = field.fz, pw = field.fw, ps = field.fs, pc = field.fc;
+  const spr = field.sprites, glow = S.glow, spin = S.spin;
+  const advance = !S.paused;
+
+  for (let i = 0, n = field.n; i < n; i++) {
+    let x = px[i], z = pz[i];
+    if (advance) {
+      const a = pw[i] * dt * spin;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const nx = x * ca + z * sa, nz = z * ca - x * sa;
+      px[i] = nx; pz[i] = nz; x = nx; z = nz;
+    }
+    const y = py[i] + Math.sin(t * 0.6 + field.fr[i]) * 0.85;
+    const dx = x - ex, dy = y - ey, dz = z - ez;
+    const vz = dx * fx + dy * fy + dz * fz;
+    if (vz < 1.2) { continue; }
+    const inv = focal / vz;
+    const sx = hw + (dx * rx + dy * ry + dz * rz) * inv;
+    const syp = hh - (dx * ux + dy * uy + dz * uz) * inv;
+    if (sx < -40 || sx > W + 40 || syp < -40 || syp > H + 40) { continue; }
+    const size = Math.min(34, Math.max(1.1, ps[i] * glow * inv * 0.5));
+    ctx.globalAlpha = Math.min(0.9, 34 / vz) * Math.min(1.5, glow);
+    ctx.drawImage(spr[pc[i]], sx - size * 0.5, syp - size * 0.5, size, size);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+}
+
+function fieldStart() {
+  if (field.dead || field.raf) { return; }
+  field.last = 0;
+  field.raf = requestAnimationFrame(fieldFrame);
+}
+function fieldStop() {
+  if (field.raf) { cancelAnimationFrame(field.raf); field.raf = 0; }
+}
+
+window.addEventListener("resize", () => { if (!field.dead) { fieldResize(); } });
+document.addEventListener("visibilitychange", () => {
+  if (field.dead) { return; }
+  if (document.hidden) { fieldStop(); } else { field.dirty = true; fieldStart(); }
+});
+
+/* ==========================================================================
+   04. CONTROL WIRING (all live)
+   ========================================================================== */
+function userTouched() {
+  if (S.autoLaunch && !state.held && !state.launched) {
+    S.autoLaunch = false; state.held = true; savePrefs(); syncHold();
+    stopCountdown(); setStatus("AUTO-LAUNCH HELD", "press ENTER THE THEATRE when ready");
+    log("auto-launch held · user input", "w");
+  }
+}
+function bindRange(id, key, fmt, after) {
+  const input = $(id), out = $(id + "-o");
+  input.value = S[key];
+  out.textContent = fmt(S[key]);
+  input.addEventListener("input", () => {
+    S[key] = parseFloat(input.value);
+    out.textContent = fmt(S[key]);
+    if (after) { after(S[key]); }
+    field.dirty = true;
+    userTouched();
+  });
+}
+bindRange("ps-density", "density", v => String(v | 0), v => fieldAlloc(v | 0));
+bindRange("ps-spin", "spin", v => v.toFixed(2) + "×");
+bindRange("ps-glow", "glow", v => v.toFixed(2));
+bindRange("ps-depth", "depth", v => String(v | 0));
+
+/* palette swatches */
+(function buildSwatches() {
+  const host = $("ps-swatches");
+  Object.keys(PALETTES).forEach(k => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "ps-sw"; b.dataset.p = k;
+    b.title = PAL_NAMES[k]; b.setAttribute("aria-label", "palette " + PAL_NAMES[k]);
+    b.addEventListener("click", () => { applyPalette(k); userTouched(); });
+    host.appendChild(b);
+  });
+})();
+function applyPalette(k) {
+  S.palette = k;
+  document.documentElement.dataset.psTheme = k;
+  document.querySelectorAll(".ps-sw").forEach(el => el.classList.toggle("on", el.dataset.p === k));
+  fieldSprites();
+  savePrefs();
+}
+
+/* drift toggle */
+const driftEl = $("ps-drift");
+function setDrift(v) {
+  S.drift = v;
+  driftEl.classList.toggle("on", v);
+  driftEl.setAttribute("aria-checked", String(v));
+  field.dirty = true;
+}
+driftEl.addEventListener("click", () => { setDrift(!S.drift); userTouched(); });
+driftEl.addEventListener("keydown", e => {
+  if (e.key === " " || e.key === "Enter") { e.preventDefault(); setDrift(!S.drift); userTouched(); }
+});
+
+/* pause / reset */
+const pauseBtn = $("ps-pause");
+pauseBtn.addEventListener("click", () => {
+  S.paused = !S.paused;
+  pauseBtn.textContent = S.paused ? "▶ RESUME FIELD" : "⏸ PAUSE FIELD";
+  field.dirty = true;
+  userTouched();
+});
+$("ps-reset").addEventListener("click", () => {
+  S.density = DEFAULTS.density; S.spin = reduceMotion ? 0.35 : DEFAULTS.spin;
+  S.glow = DEFAULTS.glow; S.depth = DEFAULTS.depth; S.paused = false;
+  setDrift(!reduceMotion);
+  ["density", "spin", "glow", "depth"].forEach(k => {
+    const input = $("ps-" + k), out = $("ps-" + k + "-o");
+    input.value = S[k];
+    out.textContent = k === "spin" || k === "glow" ? S[k].toFixed(2) + (k === "spin" ? "×" : "") : String(S[k] | 0);
+  });
+  pauseBtn.textContent = "⏸ PAUSE FIELD";
+  field.yaw = 0.6; field.t = 0;
+  fieldAlloc(S.density | 0);
+  toast("AMBIENT FIELD RESET", "ok");
+  log("field reset to defaults");
+  userTouched();
+});
+
+/* ==========================================================================
+   05. STATIC CONTENT
+   ========================================================================== */
+(function buildActs() {
+  const host = $("ps-acts");
+  ACTS.forEach((a, i) => {
+    const row = document.createElement("div");
+    row.className = "ps-act";
+    row.innerHTML = '<div class="n">' + String(i + 1).padStart(2, "0") + "</div>" +
+      '<div><div class="t">' + a[0] + '</div><div class="d">' + a[1] + "</div></div>";
+    host.appendChild(row);
+  });
+})();
+
+const modRows = new Map();
+(function buildStack() {
+  const host = $("ps-stack");
+  MODULES.forEach(m => {
+    const row = document.createElement("div");
+    row.className = "ps-mod";
+    row.innerHTML = '<span class="id">' + m.id + '</span><span class="nm">' + m.name +
+      '</span><span class="role">' + m.role + '</span><span class="st wait">PROBING</span>';
+    host.appendChild(row);
+    modRows.set(m.id, row.querySelector(".st"));
+  });
+})();
+
+/* ==========================================================================
+   06. CAPABILITY PROBE
+   ========================================================================== */
+function probeRenderer() {
+  try {
+    const c = document.createElement("canvas");
+    let g = c.getContext("webgl2");
+    let mode = g ? "WEBGL2" : null;
+    if (!g) {
+      g = c.getContext("webgl");
+      if (g) { mode = g.getExtension("ANGLE_instanced_arrays") ? "WEBGL1 + INSTANCED" : null; }
+    }
+    if (g) {
+      const lose = g.getExtension("WEBGL_lose_context");
+      if (lose) { lose.loseContext(); }
+    }
+    return mode || "CANVAS2D FALLBACK";
+  } catch (e) { return "CANVAS2D FALLBACK"; }
+}
+
+function renderCaps() {
+  const c = state.caps;
+  const rows = [
+    ["RENDERER", c.renderer],
+    ["PIXEL RATIO", (window.devicePixelRatio || 1).toFixed(2) + "×"],
+    ["THREADS", String(navigator.hardwareConcurrency || "n/a")],
+    ["MEMORY", navigator.deviceMemory ? navigator.deviceMemory + " GB" : "n/a"],
+    ["POINTER", (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) ? "TOUCH" : "FINE"],
+    ["MOTION", reduceMotion ? "REDUCED" : "FULL"],
+    ["VIEWPORT", window.innerWidth + "×" + window.innerHeight]
+  ];
+  const host = $("ps-caps");
+  host.innerHTML = "";
+  rows.forEach(r => {
+    const d = document.createElement("div");
+    d.className = "ps-cap";
+    d.innerHTML = "<span>" + r[0] + "</span><b>" + r[1] + "</b>";
+    host.appendChild(d);
+  });
+  $("ps-chip-gl").innerHTML = "RENDERER <b>" + c.renderer + "</b>";
+  $("ps-chip-gl").classList.toggle("ok", c.renderer.indexOf("WEBGL") === 0);
+}
+
+/* ==========================================================================
+   07. MODULE PREFLIGHT (real dynamic imports, measured)
+   ========================================================================== */
+async function preflight() {
+  state.probesDone = 0; state.failed = [];
+  setStatus("PROBING MODULE GRAPH", "0 / " + MODULES.length + " linked");
+  log("preflight started · " + MODULES.length + " modules");
+
+  const jobs = MODULES.map(async m => {
+    const t0 = performance.now();
+    const chip = modRows.get(m.id);
+    try {
+      await import(m.file);
+      const ms = performance.now() - t0;
+      chip.className = "st ok";
+      chip.textContent = "LINKED " + ms.toFixed(0) + "ms";
+      log(m.id + " " + m.name + " linked (" + ms.toFixed(1) + " ms)", "g");
+      m.ok = true; m.ms = ms;
+    } catch (err) {
+      const ms = performance.now() - t0;
+      chip.className = "st bad";
+      chip.textContent = "FAILED";
+      log(m.id + " " + m.name + " FAILED · " + (err && err.message ? err.message : err), "e");
+      m.ok = false; m.error = String(err && err.message ? err.message : err);
+      state.failed.push(m);
+    }
+    state.probesDone++;
+    setProgress((state.probesDone / MODULES.length) * 100);
+    setStatus("PROBING MODULE GRAPH", state.probesDone + " / " + MODULES.length + " linked");
+  });
+
+  await Promise.allSettled(jobs);
+
+  const engine = MODULES.find(m => m.id === "010");
+  const optionalOnly = state.failed.every(m => m.role === "OPTIONAL");
+  const chip = $("ps-chip-stack");
+
+  if (state.failed.length === 0) {
+    chip.innerHTML = "STACK <b>10 / 10 LINKED</b>"; chip.className = "ps-chip ok";
+    log("module graph complete · all ten linked", "g");
+  } else if (optionalOnly) {
+    chip.innerHTML = "STACK <b>9 / 10 · 011 FALLBACK</b>"; chip.className = "ps-chip ok";
+    log("011 unavailable · showcase will use its internal codec", "w");
+  } else {
+    chip.innerHTML = "STACK <b>" + (MODULES.length - state.failed.length) + " / 10 · BLOCKED</b>";
+    chip.className = "ps-chip bad";
+    log("required module missing · engine cannot start", "e");
+  }
+
+  renderCaps();
+
+  if (engine.ok) {
+    setStatus("READY · ALL SYSTEMS NOMINAL", "eight acts · auto-cycle · auto-randomization");
+    if (S.autoLaunch && !state.held) { startCountdown(3); }
+    else { setStatus("READY · AUTO-LAUNCH HELD", "press ENTER THE THEATRE when ready"); }
+  } else {
+    setStatus("ENGINE MODULE UNAVAILABLE", "010_bitECS_core.js failed to load — see manifest");
+    toast("bitECS CORE FAILED TO LINK", "err");
+  }
+}
+
+/* ==========================================================================
+   08. COUNTDOWN + LAUNCH + HANDOVER
+   ========================================================================== */
+let countTimer = 0;
+function stopCountdown() { if (countTimer) { clearInterval(countTimer); countTimer = 0; } }
+function startCountdown(sec) {
+  stopCountdown();
+  let left = sec;
+  setStatus("AUTO-LAUNCH IN " + left, "press HOLD to explore the console");
+  countTimer = setInterval(() => {
+    left--;
+    if (left <= 0) { stopCountdown(); launch(); return; }
+    setStatus("AUTO-LAUNCH IN " + left, "press HOLD to explore the console");
+  }, 1000);
+}
+function syncHold() {
+  holdBtn.classList.toggle("on", state.held);
+  holdBtn.textContent = state.held ? "AUTO ▶" : "HOLD";
+}
+holdBtn.addEventListener("click", () => {
+  if (state.launched || state.launching) { return; }
+  state.held = !state.held;
+  S.autoLaunch = !state.held;
+  savePrefs(); syncHold();
+  if (state.held) {
+    stopCountdown();
+    setStatus("AUTO-LAUNCH HELD", "press ENTER THE THEATRE when ready");
+    log("auto-launch held", "w");
+  } else {
+    log("auto-launch resumed");
+    startCountdown(3);
+  }
+});
+
+async function launch() {
+  if (state.launching || state.launched) { return; }
+  state.launching = true;
+  stopCountdown();
+  $("ps-fatal").classList.remove("show");
+  enterBtn.disabled = true;
+  enterBtn.textContent = "OPENING…";
+  setStatus("IMPORTING particle_showcase.js", "handing the stage over");
+  setProgress(100);
+  log("import particle_showcase.js");
+  try {
+    await import(SHOWCASE);
+    state.launched = true;
+    log("showcase module evaluated · curtain up", "g");
+    setStatus("CURTAIN UP", "the theatre is live");
+    handover();
+  } catch (err) {
+    state.launching = false;
+    enterBtn.disabled = false;
+    enterBtn.textContent = "▶ ENTER THE THEATRE";
+    log("showcase import FAILED · " + (err && err.message ? err.message : err), "e");
+    setStatus("LAUNCH FAILED", "see the diagnostic panel");
+    showFatal(err);
+  }
+}
+enterBtn.addEventListener("click", () => { state.held = true; S.autoLaunch = false; savePrefs(); syncHold(); launch(); });
+
+function handover() {
+  /* exactly one render loop must survive: kill the preview first */
+  field.dead = true;
+  fieldStop();
+  window.removeEventListener("resize", noop);
+
+  consoleEl.classList.add("gone");
+  $("ps-field").classList.add("gone");
+  document.querySelector(".ps-aurora").classList.add("gone");
+  document.querySelector(".ps-grain").classList.add("gone");
+  document.querySelector(".ps-vignette").classList.add("gone");
+  toastsEl.remove();
+
+  const delay = reduceMotion ? 220 : 640;
+  setTimeout(() => {
+    consoleEl.remove();
+    $("ps-field").remove();
+    const a = document.querySelector(".ps-aurora"); if (a) { a.remove(); }
+    const g = document.querySelector(".ps-grain"); if (g) { g.remove(); }
+    const v = document.querySelector(".ps-vignette"); if (v) { v.remove(); }
+    field.ctx = null; field.sprites.length = 0;
+    field.fx = field.fy = field.fz = field.fr = field.fw = field.fs = field.fc = null;
+  }, delay);
+
+  $("ps-pills").classList.add("show");
+  window.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !document.fullscreenElement) { location.reload(); }
+  });
+}
+function noop() { /* placeholder kept referenced for safe removeEventListener */ }
+
+/* ==========================================================================
+   09. DIAGNOSTICS
+   ========================================================================== */
+function report() {
+  const lines = [];
+  lines.push("PARTICLE THEATRE · diagnostic report");
+  lines.push("time      : " + new Date().toISOString());
+  lines.push("url       : " + location.href);
+  lines.push("renderer  : " + state.caps.renderer);
+  lines.push("viewport  : " + window.innerWidth + "x" + window.innerHeight + " @ " + (window.devicePixelRatio || 1));
+  lines.push("threads   : " + (navigator.hardwareConcurrency || "n/a"));
+  lines.push("memory    : " + (navigator.deviceMemory || "n/a"));
+  lines.push("motion    : " + (reduceMotion ? "reduced" : "full"));
+  lines.push("userAgent : " + navigator.userAgent);
+  lines.push("");
+  lines.push("module manifest:");
+  MODULES.forEach(m => {
+    lines.push("  " + m.id + " " + m.name.padEnd(16) + " " + m.role.padEnd(9) +
+      (m.ok ? "LINKED " + (m.ms || 0).toFixed(1) + "ms" : "FAILED · " + (m.error || "not probed")));
+  });
+  lines.push("");
+  lines.push("showcase  : " + (state.launched ? "launched" : state.launching ? "launching" : "not launched"));
+  if (state.lastError) { lines.push("lastError : " + state.lastError); }
+  return lines.join("\n");
+}
+async function copyReport() {
+  const text = report();
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      document.execCommand("copy"); ta.remove();
+    }
+    toast("DIAGNOSTIC REPORT COPIED", "ok");
+    log("diagnostic report copied to clipboard", "g");
+  } catch (e) {
+    toast("CLIPBOARD BLOCKED — report logged", "warn");
+    log("clipboard blocked · report dumped below", "w");
+    log(text.replace(/\n/g, " · "));
+  }
+}
+$("ps-copy").addEventListener("click", copyReport);
+$("ps-fcopy").addEventListener("click", copyReport);
+
+function showFatal(err) {
+  state.lastError = String(err && err.stack ? err.stack : err);
+  $("ps-fatal-msg").textContent = "Failed to load " + SHOWCASE + " — " +
+    (err && err.message ? err.message : String(err));
+  const list = $("ps-fatal-list");
+  list.innerHTML = "";
+  const bad = MODULES.filter(m => m.ok === false);
+  if (bad.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = "All ten math modules linked; the showcase module itself failed to evaluate.";
+    list.appendChild(li);
+  } else {
+    bad.forEach(m => {
+      const li = document.createElement("li");
+      li.textContent = m.id + " " + m.name + " (" + m.role + ") — " + (m.error || "load failed");
+      list.appendChild(li);
+    });
+  }
+  $("ps-fatal").classList.add("show");
+}
+$("ps-retry").addEventListener("click", () => { $("ps-fatal").classList.remove("show"); launch(); });
+$("ps-reload").addEventListener("click", () => location.reload());
+
+/* ==========================================================================
+   10. POST-LAUNCH PILLS
+   ========================================================================== */
+$("ps-back").addEventListener("click", () => location.reload());
+const fullBtn = $("ps-full");
+fullBtn.addEventListener("click", async () => {
+  try {
+    if (document.fullscreenElement) { await document.exitFullscreen(); }
+    else if (document.documentElement.requestFullscreen) { await document.documentElement.requestFullscreen(); }
+    else { toast("FULLSCREEN NOT AVAILABLE", "warn"); }
+  } catch (e) { toast("FULLSCREEN BLOCKED", "warn"); }
+});
+document.addEventListener("fullscreenchange", () => {
+  fullBtn.textContent = document.fullscreenElement ? "⛶ EXIT FULL" : "⛶ FULLSCREEN";
+});
+
+/* ==========================================================================
+   11. BOOT
+   ========================================================================== */
+(function boot() {
+  applyPalette(S.palette);
+  state.held = !S.autoLaunch;
+  syncHold();
+  fieldResize();
+  fieldSprites();
+  fieldAlloc(S.density | 0);
+  fieldStart();
+
+  state.caps.renderer = probeRenderer();
+  renderCaps();
+  window.addEventListener("resize", renderCaps);
+
+  log("console online · " + state.caps.renderer.toLowerCase());
+  log("ambient field seeded · " + S.density + " particles");
+  setProgress(2);
+  preflight();
+})();
+</script>
+
+</body>
+</html>

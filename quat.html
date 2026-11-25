@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<!-- ==========================================================================
+  file number : 016
+  full path name : src/index2.html
+  description : Updated single entry point for the DEEP FIELD series —
+                supersedes index.html (013). Loads demo2.css (015) and boots
+                every demo module in the series:
+                  007_mat4_demo.js   · MAT4 CUBE LAB
+                  008_quat_demo.js   · QUATERNION SWARM
+                  009_quat2_demo.js  · DEEP FIELD · DQ BELT
+                  010_bitECS_demo.js · BIT CITY · ECS WORLD
+                New in this revision: live palette switcher driving
+                demo2.css [data-theme] tokens (ember / ion / acid / rose),
+                4-card responsive launcher grid, deep links via
+                ?demo=007|008|009|010, ESC / floating MENU pill to return,
+                staged boot overlay, and a graceful diagnostic panel when the
+                host environment blocks local ES modules (file:// CORS) —
+                the page itself never breaks. Native ES modules only:
+                no vite, no vue, no build step, no CDN requests.
+  best for : 3d graphics — launching the whole math/ECS demo series from one
+             artifact on Android mobile 64-bit WebView/Chrome or desktop,
+             with theme switching, keyboard/touch support and zero external
+             requests.
+  license : MIT
+  usage : open src/index2.html  (or serve the src/ folder with any static
+          file access if your browser blocks local ES modules);
+          deep link example: index2.html?demo=009&theme=ion
+=========================================================================== -->
+<html lang="en" data-theme="ember">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05060e">
+<meta name="description" content="DEEP FIELD SERIES — glMatrix-style SOA math + bitECS demos: mat4 cube lab, quaternion swarm, dual-quaternion belt, 1M-entity ECS world.">
+<title>DEEP FIELD SERIES · launcher 016</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2305060e'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23ffb347' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%2337e6ff'/%3E%3C/svg%3E">
+
+<!-- shared UI layer for every demo (015) -->
+<link rel="stylesheet" href="./demo2.css">
+
+<style>
+/* ------------------------------------------------------------------------
+   Launcher-only extras (everything else comes from demo2.css).
+   ------------------------------------------------------------------------ */
+.ld-themes {
+    display: flex;
+    gap: 10px;
+    margin-top: 22px;
+    animation: df2Fade 1s 0.4s both;
+}
+.ld-themes span {
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    color: var(--dim, #7d8bb0);
+    align-self: center;
+    margin-right: 4px;
+}
+.ld-swatch {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 2px solid rgba(120, 160, 255, 0.2);
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2),
+                border-color 0.18s ease, box-shadow 0.18s ease;
+    touch-action: manipulation;
+}
+.ld-swatch:hover { transform: scale(1.2); }
+.ld-swatch.on {
+    border-color: var(--text, #dfe8ff);
+    box-shadow: 0 0 14px rgba(255, 255, 255, 0.25);
+    transform: scale(1.12);
+}
+.ld-swatch[data-t="ember"] { background: linear-gradient(135deg, #ffb347 50%, #37e6ff 50%); }
+.ld-swatch[data-t="ion"]   { background: linear-gradient(135deg, #4da3ff 50%, #ff4dc4 50%); }
+.ld-swatch[data-t="acid"]  { background: linear-gradient(135deg, #b6ff3d 50%, #9a5cff 50%); }
+.ld-swatch[data-t="rose"]  { background: linear-gradient(135deg, #ff4d9d 50%, #37e6ff 50%); }
+</style>
+</head>
+
+<body>
+
+<!-- ============================ LAUNCHER DECK ============================ -->
+<div id="launch-deck">
+    <div class="ld-badge">SOA MATH · bitECS · DUAL QUATERNIONS · 016</div>
+    <div class="ld-title">DEEP FIELD SERIES</div>
+    <div class="ld-sub">
+        glMatrix-style structure-of-arrays math + bitECS core, built for 1M+
+        instances at 60 fps on Android mobile 64-bit. Zero CDN, zero build
+        step — every demo is a native ES module loading <b>./math/*</b> and
+        styled by <b>demo2.css</b>. Select a module to launch.
+    </div>
+
+    <div class="ld-themes" id="ld-themes">
+        <span>PALETTE</span>
+        <!-- swatches injected by the loader -->
+    </div>
+
+    <div class="ld-grid" id="ld-grid"><!-- cards injected by the loader --></div>
+
+    <div class="ld-foot">
+        MODULE STACK &nbsp;·&nbsp;
+        <b>002</b> vec2 · <b>003</b> vec3 · <b>004</b> vec4 · <b>005</b> mat2 ·
+        <b>006</b> mat3 · <b>007</b> mat4 · <b>008</b> quat · <b>009</b> quat2 ·
+        <b>010</b> bitECS core · <b>011</b> serialization<br>
+        PRESENTATION &nbsp;·&nbsp; <b>015</b> demo2.css <span class="ok">LINKED</span>
+        &nbsp;·&nbsp; LOADER &nbsp;·&nbsp; <b>016</b> index2.html
+    </div>
+</div>
+
+<!-- floating controls (visible only while a demo runs) -->
+<div id="menu-pill" style="display:none;">◂ MENU · ESC</div>
+
+<!-- boot overlay -->
+<div id="ld-boot">
+    <div class="ring"></div>
+    <span id="ld-boot-label">LOADING MODULE</span>
+</div>
+
+<!-- diagnostic panel -->
+<div id="ld-error">
+    <div class="box">
+        <h2>MODULE LOAD BLOCKED</h2>
+        <p id="ld-error-msg"></p>
+        <p>
+            The demos are native ES modules (<code>import ... from "./math/*"</code>).
+            Some browsers block local module imports from <code>file://</code>
+            for security. Run this page from any environment with local file
+            module access (Android WebView with file access enabled, or any
+            static file server pointing at the <code>src/</code> folder).
+        </p>
+        <button id="ld-error-back">◂ BACK TO DECK</button>
+    </div>
+</div>
+
+<noscript>
+    <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#dfe8ff;font-family:monospace;background:#05060e;z-index:99999;">
+        JavaScript is required to run the DEEP FIELD demo series.
+    </div>
+</noscript>
+
+<!-- ============================== LOADER ================================ -->
+<script type="module">
+// ---------------------------------------------------------------------------
+// Demo registry — topological order (dependencies live inside each module).
+// ---------------------------------------------------------------------------
+const REGISTRY = [
+    {
+        key: "007",
+        file: "./007_mat4_demo.js",
+        name: "MAT4 CUBE LAB",
+        desc: "Hero cube with spring-follow, keyframe slerp, Kepler orbit and aim-lookat behaviors, 8 orbital satellites, 6-bone FABRIK IK arm, 1500-body debris field, spatial grid, instance batch, floating origin and 011 serialization round-trip.",
+        tags: ["mat4 SOA", "spring damp", "blendTRS", "Kepler", "FABRIK", "serialize"]
+    },
+    {
+        key: "008",
+        file: "./008_quat_demo.js",
+        name: "QUATERNION SWARM",
+        desc: "10,000-instance orientation field: noise swirl, staggered soaSlerp morphing (sphere → torus → galaxy → lattice), crowd soaLookAt + soaSpringDamp, full Kepler belt with velocity-aligned quats, dual-quat skinned creature, hue-graded buckets.",
+        tags: ["quat SOA", "soaSlerp", "soaSpringDamp", "soaLookAt", "10k bodies", "DLB skin"]
+    },
+    {
+        key: "009",
+        file: "./009_quat2_demo.js",
+        name: "DEEP FIELD · DQ BELT",
+        desc: "50k rigid bodies stored purely as dual-quaternion SOA consumed directly by instanced WebGL, staggered slice baking, 16-bone DLB space whale, dramatic nebula lighting, full live control deck, floating origin and snapshot export.",
+        tags: ["quat2 SOA", "WebGL instancing", "50k bodies", "DQ skinning", "control deck", "export"]
+    },
+    {
+        key: "010",
+        file: "./010_bitECS_demo.js",
+        name: "BIT CITY · ECS WORLD",
+        desc: "Up to 1M entities in a bitECS world: SOA components, queries + observers, spatial-grid neighborhood queries, spring-damped drone animation, FABRIK crane IK, Kepler orbital system, hue-drift color grading, instance batch packing, floating origin and snapshot export — with per-system timing HUD.",
+        tags: ["bitECS 010", "1M entities", "queries", "spatial grid", "IK cranes", "floating origin"]
+    }
+];
+
+const THEMES = [
+    { key: "ember", label: "Ember Belt" },
+    { key: "ion",   label: "Ion Storm" },
+    { key: "acid",  label: "Acid Reef" },
+    { key: "rose",  label: "Void Rose" }
+];
+
+const params = new URLSearchParams(location.search);
+const selectedKey = (params.get("demo") || "").trim();
+const selected = REGISTRY.find(d => d.key === selectedKey) || null;
+
+const deck     = document.getElementById("launch-deck");
+const grid     = document.getElementById("ld-grid");
+const themesEl = document.getElementById("ld-themes");
+const pill     = document.getElementById("menu-pill");
+const boot     = document.getElementById("ld-boot");
+const bootLbl  = document.getElementById("ld-boot-label");
+const errPanel = document.getElementById("ld-error");
+const errMsg   = document.getElementById("ld-error-msg");
+
+function goHome() {
+    // full reload without query params — unloads the module cleanly
+    location.href = location.pathname;
+}
+
+// ---------------------------------------------------------------------------
+// THEME SWITCHER — drives demo2.css [data-theme] tokens
+// ---------------------------------------------------------------------------
+function applyTheme(key) {
+    document.documentElement.dataset.theme = key;
+    const list = themesEl.querySelectorAll(".ld-swatch");
+    for (let i = 0; i < list.length; i++) {
+        list[i].classList.toggle("on", list[i].dataset.t === key);
+    }
+}
+(function buildThemes() {
+    const initial = (params.get("theme") || "ember").toLowerCase();
+    for (const t of THEMES) {
+        const b = document.createElement("button");
+        b.className = "ld-swatch";
+        b.dataset.t = t.key;
+        b.title = t.label;
+        b.setAttribute("aria-label", "palette " + t.label);
+        b.addEventListener("pointerdown", (e) => { e.preventDefault(); applyTheme(t.key); });
+        themesEl.appendChild(b);
+    }
+    applyTheme(THEMES.some(t => t.key === initial) ? initial : "ember");
+})();
+
+pill.addEventListener("pointerdown", goHome);
+document.getElementById("ld-error-back").addEventListener("pointerdown", () => {
+    errPanel.style.display = "none";
+    goHome();
+});
+
+// ---------------------------------------------------------------------------
+// LAUNCHER MODE — render cards
+// ---------------------------------------------------------------------------
+if (!selected) {
+    for (const demo of REGISTRY) {
+        const card = document.createElement("div");
+        card.className = "ld-card";
+        card.innerHTML =
+            '<span class="ld-num">MODULE ' + demo.key + '_D</span>' +
+            '<span class="ld-name">' + demo.name + '</span>' +
+            '<span class="ld-desc">' + demo.desc + '</span>' +
+            '<span class="ld-tags">' + demo.tags.map(t => '<span class="ld-tag">' + t + '</span>').join("") + '</span>' +
+            '<button class="ld-launch">▶ LAUNCH</button>';
+        card.querySelector(".ld-launch").addEventListener("pointerdown", () => {
+            const theme = document.documentElement.dataset.theme || "ember";
+            location.href = location.pathname + "?demo=" + demo.key + "&theme=" + theme;
+        });
+        grid.appendChild(card);
+    }
+}
+// ---------------------------------------------------------------------------
+// DEMO MODE — hide deck, boot overlay, dynamic import
+// ---------------------------------------------------------------------------
+else {
+    deck.style.display = "none";
+    boot.style.display = "flex";
+    bootLbl.textContent = "LOADING " + selected.file.split("/").pop().toUpperCase();
+
+    import(selected.file)
+        .then(() => {
+            boot.style.display = "none";
+            pill.style.display = "block";
+            window.addEventListener("keydown", (e) => {
+                if (e.key === "Escape") { goHome(); }
+            });
+        })
+        .catch((err) => {
+            console.error("[index2] demo load failed:", err);
+            boot.style.display = "none";
+            errMsg.textContent = "Failed to load " + selected.file + " — " +
+                (err && err.message ? err.message : String(err));
+            errPanel.style.display = "flex";
+        });
+}
+</script>
+
+</body>
+</html>

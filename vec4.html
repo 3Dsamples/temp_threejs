@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+	<meta name="color-scheme" content="dark" />
+	<meta name="description" content="vec4 host — 10 real-time examples of 004_vec4_demo.js on Three.js r185, transparent UI, WebGL/WebGPU switch." />
+	<title>004 Vec4 Demo — Three.js r185</title>
+
+	<!-- Demo stylesheet (primary name + legacy fallback name) -->
+	<link rel="stylesheet" href="./004_vec4_demo.css" />
+	<link rel="stylesheet" href="./04_vec4_demo.css" />
+
+	<style>
+		/* ================================================================
+		   CRITICAL HOST STYLES + TRANSPARENT-UI OVERRIDES
+		   ================================================================ */
+		*,
+		*::before,
+		*::after {
+			box-sizing: border-box;
+		}
+
+		html,
+		body {
+			margin: 0;
+			padding: 0;
+			width: 100%;
+			height: 100%;
+			overflow: hidden;
+			background: transparent;
+			color: #eaf3fb;
+			font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+			-webkit-font-smoothing: antialiased;
+		}
+
+		#app,
+		#vec4-demo,
+		.vec4-demo,
+		.vec4-demo-root {
+			position: relative;
+			width: 100%;
+			height: 100%;
+			overflow: hidden;
+			isolation: isolate;
+			background: transparent;
+		}
+
+		canvas {
+			display: block;
+			width: 100%;
+			height: 100%;
+			touch-action: none;
+			outline: none;
+			background: transparent;
+		}
+
+		/* ---- force EVERY demo UI surface to a transparent glass look ---- */
+		.vec4-demo-panel,
+		.vec4-demo-panel * {
+			box-shadow: none !important;
+		}
+
+		.vec4-demo-panel {
+			background: rgba(10, 14, 20, 0.26) !important;
+			border-color: rgba(255, 255, 255, 0.10) !important;
+			backdrop-filter: blur(10px) saturate(120%);
+			-webkit-backdrop-filter: blur(10px) saturate(120%);
+		}
+
+		.vec4-demo-panel select,
+		.vec4-demo-panel input[type="range"] {
+			background-color: rgba(0, 0, 0, 0.20) !important;
+			border-color: rgba(255, 255, 255, 0.10) !important;
+		}
+
+		.vec4-demo-panel button {
+			background: rgba(53, 200, 255, 0.10) !important;
+			border-color: rgba(53, 200, 255, 0.22) !important;
+		}
+
+		.vec4-demo-panel button:hover {
+			background: rgba(53, 200, 255, 0.18) !important;
+		}
+
+		.vec4-demo-panel pre,
+		.vec4-demo-panel div[style*="min-height"] {
+			background: rgba(0, 0, 0, 0.20) !important;
+			border-color: rgba(255, 255, 255, 0.07) !important;
+		}
+
+		.vec4-demo-panel label {
+			background: transparent !important;
+		}
+
+		/* ---- renderer switch HUD (top-left) ---- */
+		#renderer-hud {
+			position: fixed;
+			top: 12px;
+			left: 12px;
+			z-index: 1200;
+			display: flex;
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 8px;
+			pointer-events: auto;
+		}
+
+		.vec4-renderer-switch {
+			background: rgba(0, 0, 0, 0.26) !important;
+			backdrop-filter: blur(8px);
+			-webkit-backdrop-filter: blur(8px);
+		}
+
+		.vec4-renderer-badge {
+			background: rgba(255, 255, 255, 0.06) !important;
+			backdrop-filter: blur(8px);
+			-webkit-backdrop-filter: blur(8px);
+		}
+
+		/* ---- boot status ---- */
+		#boot-status {
+			position: fixed;
+			top: 12px;
+			left: 50%;
+			transform: translateX(-50%);
+			z-index: 1300;
+			max-width: min(92vw, 480px);
+			padding: 8px 14px;
+			border: 1px solid rgba(255, 255, 255, 0.10);
+			border-radius: 10px;
+			background: rgba(5, 8, 12, 0.32);
+			backdrop-filter: blur(8px);
+			-webkit-backdrop-filter: blur(8px);
+			color: #b4c4d4;
+			font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			white-space: pre-wrap;
+			word-break: break-word;
+			transition: opacity 300ms ease;
+			pointer-events: none;
+		}
+
+		#boot-status.ready { color: #4ade80; border-color: rgba(74, 222, 128, 0.35); }
+		#boot-status.error { color: #ff5d73; border-color: rgba(255, 93, 115, 0.35); }
+		#boot-status.hidden { opacity: 0; }
+
+		noscript {
+			display: grid;
+			place-items: center;
+			height: 100vh;
+			padding: 24px;
+			background: #05080c;
+			color: #ff5d73;
+			font: 14px/1.5 ui-sans-serif, system-ui, sans-serif;
+			text-align: center;
+		}
+
+		@media (max-width: 640px) {
+			#renderer-hud { top: 8px; left: 8px; }
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			*, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+		}
+	</style>
+</head>
+
+<body>
+	<noscript>
+		This demo requires JavaScript and native ES module support.
+	</noscript>
+
+	<div id="app">
+		<div id="vec4-demo" class="vec4-demo vec4-demo-root">
+			<canvas
+				id="vec4-demo-canvas"
+				class="vec4-canvas vec4-canvas-layer webgl-canvas three-canvas"
+				tabindex="0"
+				aria-label="Vec4 demonstration canvas"
+			></canvas>
+		</div>
+	</div>
+
+	<!-- ================================================================
+	     RENDERER BACKEND SWITCH (WebGL <-> WebGPU)
+	     Markup contract styled by 004_vec4_demo.css
+	     ================================================================ -->
+	<div id="renderer-hud">
+		<div
+			class="vec4-renderer-switch"
+			id="renderer-switch"
+			data-active="webgl"
+			role="radiogroup"
+			aria-label="Renderer backend"
+		>
+			<button class="vec4-renderer-option is-active" data-renderer="webgl" role="radio" aria-checked="true">WebGL</button>
+			<button class="vec4-renderer-option" data-renderer="webgpu" role="radio" aria-checked="false">WebGPU</button>
+		</div>
+		<div class="vec4-renderer-badge" id="renderer-badge">detecting backend…</div>
+	</div>
+
+	<!-- Boot status indicator -->
+	<div id="boot-status" role="status" aria-live="polite">Initializing Three.js r185 host…</div>
+
+	<!-- Toast for backend messages -->
+	<div class="vec4-toast" id="renderer-toast" role="status"></div>
+
+	<!-- ================================================================
+	     THREE.JS r185 IMPORT MAP
+	     ================================================================ -->
+	<script type="importmap">
+	{
+		"imports": {
+			"three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+			"three/": "https://cdn.jsdelivr.net/npm/three@0.185.0/",
+			"three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.webgpu.js",
+			"three/tsl": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.tsl.js",
+			"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/",
+			"three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
+		}
+	}
+	</script>
+
+	<!-- ================================================================
+	     MODULE LOADER — no top-level await
+	     ================================================================ -->
+	<script type="module">
+		var statusEl = document.getElementById("boot-status");
+		var badgeEl = document.getElementById("renderer-badge");
+		var switchEl = document.getElementById("renderer-switch");
+		var toastEl = document.getElementById("renderer-toast");
+		var canvasEl = document.getElementById("vec4-demo-canvas");
+
+		var PREF_KEY = "vec4-renderer-pref";
+
+		function setStatus(msg, kind) {
+			if (!statusEl) { return; }
+			statusEl.textContent = msg;
+			statusEl.className = kind || "";
+		}
+
+		function hideStatus(delay) {
+			setTimeout(function () {
+				if (!statusEl) { return; }
+				statusEl.classList.add("hidden");
+				setTimeout(function () {
+					if (statusEl && statusEl.parentNode) {
+						statusEl.parentNode.removeChild(statusEl);
+					}
+					statusEl = null;
+				}, 350);
+			}, delay || 1400);
+		}
+
+		function showToast(msg) {
+			if (!toastEl) { return; }
+			toastEl.textContent = msg;
+			toastEl.classList.add("show");
+			setTimeout(function () { toastEl.classList.remove("show"); }, 2400);
+		}
+
+		function readPref() {
+			try { return localStorage.getItem(PREF_KEY) || "webgl"; }
+			catch (e) { return "webgl"; }
+		}
+
+		function writePref(value) {
+			try { localStorage.setItem(PREF_KEY, value); }
+			catch (e) { /* private mode */ }
+		}
+
+		function detectWebGPU() {
+			return new Promise(function (resolve) {
+				try {
+					if (!navigator.gpu) { resolve(false); return; }
+					navigator.gpu.requestAdapter().then(
+						function (adapter) { resolve(!!adapter); },
+						function () { resolve(false); }
+					);
+				} catch (e) { resolve(false); }
+			});
+		}
+
+		function applyBackendUI(name, label) {
+			if (switchEl) { switchEl.setAttribute("data-active", name); }
+			document.documentElement.setAttribute("data-renderer", name);
+
+			if (!switchEl) { return; }
+			var opts = switchEl.querySelectorAll(".vec4-renderer-option");
+			for (var i = 0; i < opts.length; i++) {
+				var isActive = opts[i].getAttribute("data-renderer") === name;
+				opts[i].classList.toggle("is-active", isActive);
+				opts[i].setAttribute("aria-checked", isActive ? "true" : "false");
+			}
+
+			if (badgeEl) { badgeEl.textContent = label; }
+		}
+
+		/* Probe which context the demo canvas actually holds. */
+		function probeActiveBackend() {
+			setTimeout(function () {
+				try {
+					var gl = canvasEl.getContext("webgl2");
+					var active = gl ? "webgl" : "webgpu";
+					applyBackendUI(
+						active,
+						active === "webgl" ? "WebGL2 · active · r185" : "WebGPU · active · r185"
+					);
+				} catch (e) { /* ignore */ }
+			}, 700);
+		}
+
+		function wireSwitch() {
+			if (!switchEl) { return; }
+
+			switchEl.addEventListener("click", function (ev) {
+				var btn = ev.target.closest ? ev.target.closest(".vec4-renderer-option") : null;
+				if (!btn || btn.classList.contains("is-disabled") || btn.hasAttribute("disabled")) { return; }
+
+				var name = btn.getAttribute("data-renderer");
+				writePref(name);
+
+				var api = globalThis.__VEC4_DEMO__;
+				if (api && typeof api.setRendererBackend === "function") {
+					api.setRendererBackend(name);
+					applyBackendUI(name, name === "webgpu" ? "WebGPU · active · r185" : "WebGL2 · active · r185");
+					showToast("Renderer backend switched to " + name.toUpperCase());
+				} else {
+					applyBackendUI(name, name === "webgpu" ? "WebGPU · selected" : "WebGL2 · active · r185");
+					showToast(name.toUpperCase() + " selected — live swap uses the demo setRendererBackend hook when present.");
+				}
+
+				window.dispatchEvent(new CustomEvent("vec4:renderer-change", { detail: { renderer: name } }));
+			});
+		}
+
+		function loadDemo(pref) {
+			globalThis.__VEC4_DEMO_HOST__ = {
+				version: "native-browser-r185",
+				buildTooling: "none",
+				framework: "none",
+				mathProvider: "custom-gl-matrix-compatible",
+				container: document.getElementById("vec4-demo"),
+				canvas: canvasEl,
+				rendererPreference: pref,
+				started: false
+			};
+
+			setStatus("Loading 004_vec4_demo.js …");
+
+			return import("./004_vec4_demo.js")
+				.catch(function () {
+					/* legacy file name fallback */
+					return import("./04_vec4_demo.js");
+				})
+				.then(function (moduleRef) {
+					setStatus("004_vec4_demo.js loaded — 10 real-time vec4 examples ready.", "ready");
+					var keys = moduleRef ? Object.keys(moduleRef).join(", ") : "(self-bootstrapping module)";
+					console.info("[HOST] Module loaded. Exports: " + keys);
+					probeActiveBackend();
+					hideStatus(1600);
+				})
+				.catch(function (err) {
+					console.error("[HOST] Fatal load error:", err);
+					setStatus("FAILED:\n" + ((err && err.message) ? err.message : String(err)), "error");
+				});
+		}
+
+		detectWebGPU()
+			.then(function (webgpuOk) {
+				var pref = readPref();
+
+				if (!webgpuOk) {
+					var gpuBtn = switchEl ? switchEl.querySelector('[data-renderer="webgpu"]') : null;
+					if (gpuBtn) {
+						gpuBtn.classList.add("is-disabled");
+						gpuBtn.setAttribute("disabled", "");
+						gpuBtn.setAttribute("data-hint", "WebGPU not available on this device");
+					}
+					if (pref === "webgpu") { pref = "webgl"; }
+				}
+
+				applyBackendUI(pref, pref === "webgpu" ? "WebGPU · selected" : "WebGL2 · active · r185");
+				wireSwitch();
+				return loadDemo(pref);
+			})
+			.catch(function (err) {
+				console.error(err);
+				setStatus("Backend detection failed:\n" + ((err && err.message) ? err.message : String(err)), "error");
+				wireSwitch();
+				loadDemo("webgl");
+			});
+	</script>
+</body>
+</html>

@@ -1,0 +1,713 @@
+/* File: src/math/003_vec3_demo.css */
+
+:root {
+	color-scheme: dark;
+
+	--v3-bg-0: #05080d;
+	--v3-bg-1: #0a1017;
+	--v3-bg-2: #101823;
+	--v3-bg-3: #172230;
+
+	--v3-border-1: rgba(255, 255, 255, 0.08);
+	--v3-border-2: rgba(255, 255, 255, 0.14);
+	--v3-border-3: rgba(53, 200, 255, 0.28);
+
+	--v3-text-1: #eaf3fb;
+	--v3-text-2: #b4c4d4;
+	--v3-text-3: #7d8fa2;
+
+	--v3-accent: #35c8ff;
+	--v3-accent-2: #7cffb2;
+	--v3-accent-3: #ffb347;
+	--v3-danger: #ff5d73;
+	--v3-ok: #4ade80;
+
+	--v3-shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.28);
+	--v3-shadow-md: 0 10px 30px rgba(0, 0, 0, 0.34);
+	--v3-shadow-lg: 0 18px 60px rgba(0, 0, 0, 0.42);
+
+	--v3-radius-sm: 7px;
+	--v3-radius-md: 12px;
+	--v3-radius-lg: 18px;
+
+	--v3-font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+	--v3-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+	--v3-panel-width: 380px;
+	--v3-panel-max-height: calc(100vh - 24px);
+	--v3-hud-gap: 12px;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	background: var(--v3-bg-0);
+	color: var(--v3-text-1);
+	font-family: var(--v3-font-ui);
+	font-size: 14px;
+	line-height: 1.45;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+body {
+	touch-action: none;
+	user-select: none;
+}
+
+a {
+	color: var(--v3-accent);
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+button,
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+}
+
+code,
+pre,
+kbd,
+samp {
+	font-family: var(--v3-font-mono);
+}
+
+canvas {
+	display: block;
+	max-width: 100%;
+	max-height: 100%;
+}
+
+img,
+svg {
+	display: block;
+	max-width: 100%;
+}
+
+#app,
+#root,
+#demo,
+#vec3-demo,
+.vec3-demo,
+.vec3-demo-root {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	isolation: isolate;
+	background:
+		radial-gradient(circle at 18% 22%, rgba(53, 200, 255, 0.10), transparent 40%),
+		radial-gradient(circle at 82% 78%, rgba(124, 255, 178, 0.07), transparent 38%),
+		linear-gradient(180deg, var(--v3-bg-0), var(--v3-bg-1));
+}
+
+#vec3-demo-canvas,
+.vec3-canvas,
+.vec3-canvas-layer,
+.webgl-canvas,
+.three-canvas {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	display: block;
+	touch-action: none;
+	cursor: crosshair;
+	background: transparent;
+	outline: none;
+}
+
+#vec3-demo-canvas:focus-visible,
+.vec3-canvas:focus-visible,
+.vec3-canvas-layer:focus-visible {
+	outline: 2px solid rgba(53, 200, 255, 0.65);
+	outline-offset: -2px;
+}
+
+.vec3-demo-overlay,
+.vec3-overlay,
+.vec3-hud {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 10;
+}
+
+.vec3-demo-overlay > *,
+.vec3-overlay > *,
+.vec3-hud > * {
+	pointer-events: auto;
+}
+
+/* ------------------------------------------------------------------ */
+/* Main demo panel                                                     */
+/* ------------------------------------------------------------------ */
+
+.vec3-demo-panel,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) {
+	position: fixed !important;
+	top: var(--v3-hud-gap) !important;
+	right: var(--v3-hud-gap) !important;
+	z-index: 1000;
+	width: min(var(--v3-panel-width), calc(100vw - 24px)) !important;
+	max-height: var(--v3-panel-max-height) !important;
+	overflow: auto !important;
+	padding: 14px !important;
+	border: 1px solid var(--v3-border-2) !important;
+	border-radius: var(--v3-radius-lg) !important;
+	background:
+		linear-gradient(180deg, rgba(16, 24, 35, 0.92), rgba(10, 16, 23, 0.90)) !important;
+	color: var(--v3-text-1) !important;
+	font-family: var(--v3-font-ui) !important;
+	box-shadow: var(--v3-shadow-lg);
+	backdrop-filter: blur(14px) saturate(130%);
+	contain: layout paint style;
+	scrollbar-width: thin;
+	scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.vec3-demo-panel *,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) * {
+	box-sizing: border-box;
+}
+
+.vec3-demo-panel::-webkit-scrollbar,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast)::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+.vec3-demo-panel::-webkit-scrollbar-thumb,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast)::-webkit-scrollbar-thumb {
+	background: rgba(255, 255, 255, 0.16);
+	border-radius: 999px;
+}
+
+.vec3-demo-panel::-webkit-scrollbar-track,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast)::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.vec3-demo-title,
+.vec3-demo-panel > div:first-child,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) > div:first-child {
+	margin: 0 0 10px;
+	font-size: 15px;
+	font-weight: 750;
+	letter-spacing: 0.02em;
+	color: var(--v3-text-1);
+}
+
+.vec3-demo-section,
+.vec3-demo-panel div[style*="color:#7cc4ff"],
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) div[style*="color:#7cc4ff"] {
+	margin: 12px 0 7px !important;
+	font-size: 11px;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--v3-accent) !important;
+}
+
+.vec3-demo-row,
+.vec3-demo-panel div[style*="grid-template-columns"],
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) div[style*="grid-template-columns"] {
+	display: grid !important;
+	grid-template-columns: 112px 1fr 56px !important;
+	gap: 8px;
+	align-items: center;
+	min-height: 28px;
+	margin: 6px 0 !important;
+}
+
+.vec3-demo-label,
+.vec3-demo-row > span:first-child,
+.vec3-demo-panel span[style*="opacity"],
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) span[style*="opacity"] {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--v3-text-2) !important;
+}
+
+.vec3-demo-value,
+.vec3-demo-row > span:last-child,
+.vec3-demo-panel span[style*="tabular-nums"],
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) span[style*="tabular-nums"] {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: right;
+	font-family: var(--v3-font-mono);
+	font-size: 11px;
+	color: var(--v3-text-1) !important;
+	font-variant-numeric: tabular-nums;
+}
+
+.vec3-demo-select,
+.vec3-demo-panel select,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) select {
+	width: 100% !important;
+	min-height: 32px;
+	padding: 6px 30px 6px 10px;
+	border: 1px solid var(--v3-border-1);
+	border-radius: var(--v3-radius-sm);
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)) padding-box,
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23b4c4d4' d='M6 8.5 2.5 5h7z'/%3E%3C/svg%3E") no-repeat right 9px center / 12px 12px;
+	color: var(--v3-text-1);
+	appearance: none;
+	outline: none;
+	cursor: pointer;
+	transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.vec3-demo-select:hover,
+.vec3-demo-panel select:hover,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) select:hover {
+	border-color: var(--v3-border-2);
+}
+
+.vec3-demo-select:focus-visible,
+.vec3-demo-panel select:focus-visible,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) select:focus-visible {
+	border-color: rgba(53, 200, 255, 0.55);
+	box-shadow: 0 0 0 3px rgba(53, 200, 255, 0.14);
+}
+
+.vec3-demo-range,
+.vec3-demo-panel input[type="range"],
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) input[type="range"] {
+	width: 100% !important;
+	height: 24px;
+	appearance: none;
+	background: transparent;
+	cursor: pointer;
+}
+
+.vec3-demo-range:focus-visible,
+.vec3-demo-panel input[type="range"]:focus-visible,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) input[type="range"]:focus-visible {
+	outline: 2px solid rgba(53, 200, 255, 0.72);
+	outline-offset: 3px;
+	border-radius: 6px;
+}
+
+.vec3-demo-range::-webkit-slider-runnable-track,
+.vec3-demo-panel input[type="range"]::-webkit-slider-runnable-track,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) input[type="range"]::-webkit-slider-runnable-track {
+	height: 6px;
+	border-radius: 999px;
+	background:
+		linear-gradient(90deg, rgba(53, 200, 255, 0.78), rgba(124, 255, 178, 0.42), rgba(255, 255, 255, 0.12));
+	border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.vec3-demo-range::-moz-range-track,
+.vec3-demo-panel input[type="range"]::-moz-range-track,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) input[type="range"]::-moz-range-track {
+	height: 6px;
+	border-radius: 999px;
+	background:
+		linear-gradient(90deg, rgba(53, 200, 255, 0.78), rgba(124, 255, 178, 0.42), rgba(255, 255, 255, 0.12));
+	border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.vec3-demo-range::-webkit-slider-thumb,
+.vec3-demo-panel input[type="range"]::-webkit-slider-thumb,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) input[type="range"]::-webkit-slider-thumb {
+	appearance: none;
+	width: 16px;
+	height: 16px;
+	margin-top: -6px;
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	border-radius: 50%;
+	background: #eaffff;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+	transition: transform 80ms ease, box-shadow 120ms ease;
+}
+
+.vec3-demo-range::-moz-range-thumb,
+.vec3-demo-panel input[type="range"]::-moz-range-thumb,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) input[type="range"]::-moz-range-thumb {
+	width: 16px;
+	height: 16px;
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	border-radius: 50%;
+	background: #eaffff;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+	transition: transform 80ms ease, box-shadow 120ms ease;
+}
+
+.vec3-demo-range:active::-webkit-slider-thumb,
+.vec3-demo-panel input[type="range"]:active::-webkit-slider-thumb,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) input[type="range"]:active::-webkit-slider-thumb {
+	transform: scale(1.08);
+	box-shadow: 0 0 0 5px rgba(53, 200, 255, 0.12);
+}
+
+.vec3-demo-range:active::-moz-range-thumb,
+.vec3-demo-panel input[type="range"]:active::-moz-range-thumb,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) input[type="range"]:active::-moz-range-thumb {
+	transform: scale(1.08);
+	box-shadow: 0 0 0 5px rgba(53, 200, 255, 0.12);
+}
+
+.vec3-demo-checkbox-row,
+.vec3-demo-panel label[style*="display:flex"],
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) label[style*="display:flex"] {
+	display: flex !important;
+	align-items: center;
+	gap: 8px;
+	min-height: 28px;
+	margin: 7px 0 !important;
+	cursor: pointer;
+	color: var(--v3-text-2);
+}
+
+.vec3-demo-checkbox-row:hover,
+.vec3-demo-panel label[style*="display:flex"]:hover,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) label[style*="display:flex"]:hover {
+	color: var(--v3-text-1);
+}
+
+.vec3-demo-checkbox,
+.vec3-demo-panel input[type="checkbox"],
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) input[type="checkbox"] {
+	width: 15px;
+	height: 15px;
+	flex: 0 0 auto;
+	margin: 0;
+	accent-color: var(--v3-accent);
+	cursor: pointer;
+}
+
+.vec3-demo-checkbox:focus-visible,
+.vec3-demo-panel input[type="checkbox"]:focus-visible,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) input[type="checkbox"]:focus-visible {
+	outline: 2px solid rgba(53, 200, 255, 0.72);
+	outline-offset: 2px;
+	border-radius: 4px;
+}
+
+.vec3-demo-button,
+.vec3-demo-panel button,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) button {
+	width: 100% !important;
+	margin: 7px 0 !important;
+	padding: 8px 12px !important;
+	border: 1px solid rgba(53, 200, 255, 0.24) !important;
+	border-radius: var(--v3-radius-sm) !important;
+	background:
+		linear-gradient(180deg, rgba(53, 200, 255, 0.16), rgba(53, 200, 255, 0.08)) !important;
+	color: var(--v3-text-1) !important;
+	font-weight: 680 !important;
+	line-height: 1.2;
+	text-align: center;
+	cursor: pointer;
+	transition:
+		background 120ms ease,
+		border-color 120ms ease,
+		transform 80ms ease,
+		box-shadow 120ms ease;
+}
+
+.vec3-demo-button:hover,
+.vec3-demo-panel button:hover,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) button:hover {
+	border-color: rgba(53, 200, 255, 0.42) !important;
+	background:
+		linear-gradient(180deg, rgba(53, 200, 255, 0.22), rgba(53, 200, 255, 0.11)) !important;
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.vec3-demo-button:active,
+.vec3-demo-panel button:active,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) button:active {
+	transform: translateY(1px);
+}
+
+.vec3-demo-button:focus-visible,
+.vec3-demo-panel button:focus-visible,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) button:focus-visible {
+	outline: 2px solid rgba(53, 200, 255, 0.75);
+	outline-offset: 2px;
+}
+
+.vec3-demo-button[disabled],
+.vec3-demo-panel button[disabled],
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) button[disabled] {
+	opacity: 0.45;
+	cursor: not-allowed;
+	filter: saturate(0.6);
+}
+
+.vec3-demo-status,
+.vec3-demo-panel div[style*="min-height:16px"],
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) div[style*="min-height:16px"] {
+	margin-top: 10px !important;
+	min-height: 18px;
+	color: var(--v3-text-3) !important;
+	font-size: 11px;
+	font-family: var(--v3-font-mono);
+}
+
+.vec3-demo-info,
+.vec3-demo-panel pre,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) pre {
+	margin: 10px 0 0 !important;
+	padding: 10px 11px !important;
+	border: 1px solid var(--v3-border-1) !important;
+	border-radius: var(--v3-radius-md) !important;
+	background: rgba(0, 0, 0, 0.24) !important;
+	color: var(--v3-accent-2) !important;
+	font-family: var(--v3-font-mono) !important;
+	font-size: 11px !important;
+	line-height: 1.5;
+	white-space: pre-wrap !important;
+	word-break: break-word;
+	overflow-wrap: anywhere;
+}
+
+.vec3-demo-divider,
+.vec3-demo-panel hr,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) hr {
+	width: 100%;
+	height: 1px;
+	margin: 10px 0;
+	border: 0;
+	background: var(--v3-border-1);
+}
+
+.vec3-demo-badge,
+.vec3-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-height: 22px;
+	padding: 2px 8px;
+	border: 1px solid var(--v3-border-1);
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.05);
+	color: var(--v3-text-2);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+	white-space: nowrap;
+}
+
+.vec3-demo-badge.ok,
+.vec3-badge.ok {
+	border-color: rgba(74, 222, 128, 0.35);
+	background: rgba(74, 222, 128, 0.12);
+	color: #bdf5cf;
+}
+
+.vec3-demo-badge.warn,
+.vec3-badge.warn {
+	border-color: rgba(255, 179, 71, 0.35);
+	background: rgba(255, 179, 71, 0.12);
+	color: #ffd8a8;
+}
+
+.vec3-demo-badge.danger,
+.vec3-badge.danger {
+	border-color: rgba(255, 93, 115, 0.35);
+	background: rgba(255, 93, 115, 0.12);
+	color: #ffc2cb;
+}
+
+.vec3-demo-badge.info,
+.vec3-badge.info {
+	border-color: rgba(53, 200, 255, 0.35);
+	background: rgba(53, 200, 255, 0.12);
+	color: #b9f1ff;
+}
+
+.vec3-demo-hidden,
+.hidden,
+.visually-hidden,
+.sr-only {
+	display: none !important;
+}
+
+.visually-hidden:not(.hidden),
+.sr-only:not(.hidden) {
+	position: absolute !important;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	clip-path: inset(50%);
+	white-space: nowrap;
+	border: 0;
+}
+
+.pointer-none {
+	pointer-events: none;
+}
+
+.pointer-auto {
+	pointer-events: auto;
+}
+
+.fullscreen,
+.is-fullscreen {
+	position: fixed !important;
+	inset: 0 !important;
+	width: 100vw !important;
+	height: 100vh !important;
+	max-width: none !important;
+	max-height: none !important;
+	border-radius: 0 !important;
+	z-index: 100;
+}
+
+/* ------------------------------------------------------------------ */
+/* Mode accent helpers                                                 */
+/* ------------------------------------------------------------------ */
+
+[data-mode="particles"] {
+	--v3-accent: #35c8ff;
+}
+
+[data-mode="vectors"] {
+	--v3-accent: #ff5d73;
+}
+
+[data-mode="curves"] {
+	--v3-accent: #7cffb2;
+}
+
+[data-mode="ik"] {
+	--v3-accent: #ffb347;
+}
+
+[data-mode="spring"] {
+	--v3-accent: #b48cff;
+}
+
+[data-mode="orbital"] {
+	--v3-accent: #7cc4ff;
+}
+
+[data-mode="sh"] {
+	--v3-accent: #ffe28a;
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive behavior                                                 */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 900px) {
+	:root {
+		--v3-panel-width: 320px;
+		--v3-hud-gap: 8px;
+	}
+
+	.vec3-demo-panel,
+	body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) {
+		width: min(var(--v3-panel-width), calc(100vw - 16px)) !important;
+		padding: 12px !important;
+		font-size: 13px;
+	}
+
+	.vec3-demo-row,
+	.vec3-demo-panel div[style*="grid-template-columns"],
+	body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) div[style*="grid-template-columns"] {
+		grid-template-columns: 96px 1fr 48px !important;
+		gap: 6px;
+	}
+}
+
+@media (max-width: 640px) {
+	.vec3-demo-panel,
+	body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) {
+		top: auto !important;
+		bottom: var(--v3-hud-gap) !important;
+		left: var(--v3-hud-gap) !important;
+		right: var(--v3-hud-gap) !important;
+		width: auto !important;
+		max-height: 44vh !important;
+		border-radius: var(--v3-radius-md) !important;
+	}
+
+	#vec3-demo-canvas,
+	.vec3-canvas,
+	.vec3-canvas-layer {
+		cursor: default;
+	}
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+	.vec3-demo-panel,
+	body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) {
+		max-height: calc(100vh - 16px) !important;
+	}
+
+	.vec3-demo-info,
+	.vec3-demo-panel pre,
+	body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) pre {
+		max-height: 120px;
+		overflow: auto;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}
+
+@media print {
+	html,
+	body,
+	#app,
+	.vec3-demo-root {
+		overflow: visible;
+		background: white;
+		color: black;
+	}
+
+	.vec3-demo-overlay,
+	.vec3-overlay,
+	.vec3-demo-panel,
+	body > div[style*="fixed"]:not(#debug-panel):not(#boot-status):not(#copy-toast) {
+		display: none !important;
+	}
+
+	canvas {
+		width: 100%;
+		height: auto;
+	}
+}

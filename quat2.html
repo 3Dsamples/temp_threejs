@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<!-- ==========================================================================
+  file number : 013
+  full path name : src/index.html
+  description : Single entry point that loads demo.css and every demo module
+                in the series (007_mat4_demo.js, 008_quat_demo.js,
+                009_quat2_demo.js). Renders a launcher deck styled entirely
+                by demo.css tokens; selecting a card boots that demo via
+                dynamic import (native ES modules — no vite, no vue, no
+                build, no CDN). Deep-linkable via ?demo=007|008|009, ESC or
+                the floating MENU pill returns to the deck. If the host
+                environment blocks local ES modules (file:// CORS), a
+                graceful diagnostic panel explains how to recover — the
+                page itself never breaks.
+  best for : 3d graphics — launching the whole math/ECS demo series from one
+             artifact on Android mobile 64-bit WebView/Chrome or desktop,
+             with zero external requests and full keyboard/touch support.
+  license : MIT
+  usage : open src/index.html  (or serve the src/ folder with any static
+          file access if your browser blocks local ES modules)
+=========================================================================== -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05060e">
+<meta name="description" content="DEEP FIELD SERIES — glMatrix-style SOA math + bitECS demos: mat4 cube lab, quaternion swarm, dual-quaternion belt.">
+<title>DEEP FIELD SERIES · demo launcher</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2305060e'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23ffb347' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%2337e6ff'/%3E%3C/svg%3E">
+
+<!-- shared UI layer for every demo -->
+<link rel="stylesheet" href="./demo.css">
+
+<style>
+/* ------------------------------------------------------------------------
+   Launcher-only styling. Everything inherits design tokens from demo.css
+   (--bg, --surface, --line, --acc, --acc2, radii, easings).
+   ------------------------------------------------------------------------ */
+#launch-deck {
+    position: fixed;
+    inset: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 42px 18px 60px;
+    background:
+        radial-gradient(ellipse 90% 55% at 50% -10%, rgba(55, 230, 255, 0.07), transparent 60%),
+        radial-gradient(ellipse 70% 45% at 85% 110%, rgba(255, 179, 71, 0.06), transparent 60%),
+        var(--bg, #05060e);
+    scrollbar-width: thin;
+    scrollbar-color: var(--acc, #ffb347) rgba(120, 160, 255, 0.07);
+}
+#launch-deck::-webkit-scrollbar { width: 10px; }
+#launch-deck::-webkit-scrollbar-track { background: rgba(120, 160, 255, 0.06); }
+#launch-deck::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, var(--acc, #ffb347), var(--acc2, #37e6ff));
+    border-radius: 5px;
+    border: 2px solid rgba(5, 8, 16, 0.8);
+}
+
+.ld-badge {
+    font-size: 9.5px;
+    letter-spacing: 0.34em;
+    color: var(--dim, #7d8bb0);
+    border: 1px solid var(--line, rgba(120, 160, 255, 0.16));
+    padding: 5px 14px;
+    border-radius: 99px;
+    margin-bottom: 18px;
+    animation: dqFade 0.8s both;
+}
+.ld-title {
+    font-family: var(--font-display, sans-serif);
+    font-size: clamp(26px, 5vw, 44px);
+    font-weight: 800;
+    letter-spacing: 0.24em;
+    text-align: center;
+    background: linear-gradient(90deg, var(--acc, #ffb347), var(--acc2, #37e6ff));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: dqDrop 0.7s var(--ease-smooth) both;
+}
+.ld-sub {
+    margin-top: 10px;
+    max-width: 640px;
+    text-align: center;
+    font-size: 11.5px;
+    line-height: 1.9;
+    letter-spacing: 0.08em;
+    color: var(--dim, #7d8bb0);
+    animation: dqFade 1s 0.25s both;
+}
+
+.ld-grid {
+    margin-top: 38px;
+    width: min(1060px, 100%);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+.ld-card {
+    position: relative;
+    border: 1px solid var(--line, rgba(120, 160, 255, 0.16));
+    border-radius: var(--radius-l, 14px);
+    background: linear-gradient(180deg, var(--surface, rgba(10, 14, 26, 0.86)), rgba(6, 9, 18, 0.9));
+    padding: 20px 20px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+    transition: transform var(--speed-fast, 0.18s) ease,
+                border-color var(--speed-fast, 0.18s) ease,
+                box-shadow var(--speed-fast, 0.18s) ease;
+    animation: dqSlide 0.6s var(--ease-smooth) both;
+}
+.ld-card:nth-child(2) { animation-delay: 0.1s; }
+.ld-card:nth-child(3) { animation-delay: 0.2s; }
+.ld-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--acc, #ffb347), var(--acc2, #37e6ff), transparent);
+    opacity: 0.8;
+}
+.ld-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--line-strong, rgba(120, 160, 255, 0.34));
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5), var(--glow-acc2, 0 0 14px rgba(55, 230, 255, 0.28));
+}
+.ld-num {
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    color: var(--faint, #4a5578);
+}
+.ld-name {
+    font-family: var(--font-display, sans-serif);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--text, #dfe8ff);
+}
+.ld-desc {
+    font-size: 10.8px;
+    line-height: 1.8;
+    letter-spacing: 0.05em;
+    color: var(--dim, #7d8bb0);
+    flex: 1;
+}
+.ld-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.ld-tag {
+    font-size: 8.5px;
+    letter-spacing: 0.14em;
+    color: var(--acc2, #37e6ff);
+    border: 1px solid rgba(55, 230, 255, 0.25);
+    padding: 3px 8px;
+    border-radius: 99px;
+}
+.ld-launch {
+    margin-top: 4px;
+    padding: 12px;
+    border-radius: var(--radius-m, 9px);
+    border: 1px solid rgba(55, 230, 255, 0.4);
+    background: linear-gradient(180deg, rgba(24, 32, 58, 0.9), rgba(12, 16, 30, 0.9));
+    color: var(--acc2, #37e6ff);
+    font: inherit;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    cursor: pointer;
+    transition: all var(--speed-fast, 0.18s) ease;
+    touch-action: manipulation;
+}
+.ld-launch:hover {
+    border-color: var(--acc2, #37e6ff);
+    box-shadow: 0 0 18px rgba(55, 230, 255, 0.3);
+    transform: translateY(-1px);
+}
+.ld-launch:active { transform: translateY(0); }
+
+.ld-foot {
+    margin-top: 40px;
+    text-align: center;
+    font-size: 9.5px;
+    line-height: 2;
+    letter-spacing: 0.12em;
+    color: var(--faint, #4a5578);
+    animation: dqFade 1s 0.5s both;
+}
+.ld-foot b { color: var(--dim, #7d8bb0); font-weight: 700; }
+.ld-foot .ok { color: var(--ok, #b6ff3d); }
+
+/* floating back-to-menu pill while a demo runs */
+#menu-pill {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    padding: 7px 16px;
+    border-radius: 99px;
+    border: 1px solid var(--line, rgba(120, 160, 255, 0.16));
+    background: rgba(8, 12, 24, 0.85);
+    color: var(--acc, #ffb347);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    transition: all var(--speed-fast, 0.18s) ease;
+    display: none;
+}
+#menu-pill:hover { border-color: var(--acc, #ffb347); box-shadow: var(--glow-acc, 0 0 14px rgba(255, 179, 71, 0.28)); }
+
+/* boot overlay while a demo module loads */
+#ld-boot {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: radial-gradient(ellipse at 50% 60%, rgba(20, 26, 50, 0.92), rgba(3, 4, 10, 0.98));
+    letter-spacing: 0.3em;
+    font-size: 11px;
+    color: var(--acc, #ffb347);
+}
+#ld-boot .ring {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2px solid rgba(120, 160, 255, 0.15);
+    border-top-color: var(--acc2, #37e6ff);
+    animation: dqSpin 1s linear infinite;
+}
+
+/* diagnostic panel for blocked module loading */
+#ld-error {
+    position: fixed;
+    inset: 0;
+    z-index: 9997;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(3, 4, 10, 0.96);
+}
+#ld-error .box {
+    max-width: 560px;
+    border: 1px solid rgba(255, 61, 129, 0.4);
+    border-left: 3px solid var(--danger, #ff3d81);
+    border-radius: var(--radius-l, 14px);
+    background: var(--surface, rgba(10, 14, 26, 0.86));
+    padding: 26px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+#ld-error h2 {
+    font-family: var(--font-display, sans-serif);
+    font-size: 14px;
+    letter-spacing: 0.22em;
+    color: var(--danger, #ff3d81);
+}
+#ld-error p {
+    font-size: 11px;
+    line-height: 1.9;
+    letter-spacing: 0.05em;
+    color: var(--text, #dfe8ff);
+}
+#ld-error code {
+    color: var(--acc2, #37e6ff);
+    background: rgba(55, 230, 255, 0.08);
+    padding: 1px 6px;
+    border-radius: 4px;
+}
+#ld-error button {
+    align-self: flex-start;
+    padding: 10px 18px;
+    border-radius: var(--radius-m, 9px);
+    border: 1px solid var(--line, rgba(120, 160, 255, 0.16));
+    background: rgba(16, 22, 40, 0.9);
+    color: var(--text, #dfe8ff);
+    font: inherit;
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<!-- ============================ LAUNCHER DECK ============================ -->
+<div id="launch-deck">
+    <div class="ld-badge">SOA MATH · bitECS · DUAL QUATERNIONS · 013</div>
+    <div class="ld-title">DEEP FIELD SERIES</div>
+    <div class="ld-sub">
+        glMatrix-style structure-of-arrays math + bitECS core, built for 1M+
+        instances at 60 fps on Android mobile 64-bit. Zero CDN, zero build
+        step — every demo is a native ES module loading <b>./math/*</b> and
+        styled by <b>demo.css</b>. Select a module to launch.
+    </div>
+
+    <div class="ld-grid" id="ld-grid"><!-- cards injected by the loader --></div>
+
+    <div class="ld-foot">
+        MODULE STACK &nbsp;·&nbsp;
+        <b>002</b> vec2 · <b>003</b> vec3 · <b>004</b> vec4 · <b>005</b> mat2 ·
+        <b>006</b> mat3 · <b>007</b> mat4 · <b>008</b> quat · <b>009</b> quat2 ·
+        <b>010</b> bitECS core · <b>011</b> serialization<br>
+        PRESENTATION &nbsp;·&nbsp; <b>012</b> demo.css <span class="ok">LINKED</span>
+        &nbsp;·&nbsp; LOADER &nbsp;·&nbsp; <b>013</b> index.html
+    </div>
+</div>
+
+<!-- floating controls (visible only while a demo runs) -->
+<div id="menu-pill">◂ MENU · ESC</div>
+
+<!-- boot overlay -->
+<div id="ld-boot">
+    <div class="ring"></div>
+    <span id="ld-boot-label">LOADING MODULE</span>
+</div>
+
+<!-- diagnostic panel -->
+<div id="ld-error">
+    <div class="box">
+        <h2>MODULE LOAD BLOCKED</h2>
+        <p id="ld-error-msg"></p>
+        <p>
+            The demos are native ES modules (<code>import ... from "./math/*"</code>).
+            Some browsers block local module imports from <code>file://</code>
+            for security. Run this page from any environment with local file
+            module access (Android WebView with file access enabled, or any
+            static file server pointing at the <code>src/</code> folder).
+        </p>
+        <button id="ld-error-back">◂ BACK TO DECK</button>
+    </div>
+</div>
+
+<noscript>
+    <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#dfe8ff;font-family:monospace;background:#05060e;z-index:99999;">
+        JavaScript is required to run the DEEP FIELD demo series.
+    </div>
+</noscript>
+
+<!-- ============================== LOADER ================================ -->
+<script type="module">
+// ---------------------------------------------------------------------------
+// Demo registry — topological order (dependencies first inside each module).
+// ---------------------------------------------------------------------------
+const REGISTRY = [
+    {
+        key: "007",
+        file: "./007_mat4_demo.js",
+        name: "MAT4 CUBE LAB",
+        desc: "Hero cube with spring-follow, keyframe slerp, Kepler orbit and aim-lookat behaviors, 8 orbital satellites, 6-bone FABRIK IK arm, 1500-body debris field, spatial grid, instance batch, floating origin and 011 serialization round-trip.",
+        tags: ["mat4 SOA", "spring damp", "blendTRS", "Kepler", "FABRIK", "serialize"]
+    },
+    {
+        key: "008",
+        file: "./008_quat_demo.js",
+        name: "QUATERNION SWARM",
+        desc: "10,000-instance orientation field: noise swirl, staggered soaSlerp morphing (sphere → torus → galaxy → lattice), crowd soaLookAt + soaSpringDamp, full Kepler belt with velocity-aligned quats, dual-quat skinned creature, hue-graded buckets.",
+        tags: ["quat SOA", "soaSlerp", "soaSpringDamp", "soaLookAt", "10k bodies", "DLB skin"]
+    },
+    {
+        key: "009",
+        file: "./009_quat2_demo.js",
+        name: "DEEP FIELD · DQ BELT",
+        desc: "50k rigid bodies stored purely as dual-quaternion SOA consumed directly by instanced WebGL, staggered slice baking, 16-bone DLB space whale, dramatic nebula lighting, full live control deck, floating origin and snapshot export.",
+        tags: ["quat2 SOA", "WebGL instancing", "50k bodies", "DQ skinning", "control deck", "export"]
+    }
+];
+
+const params = new URLSearchParams(location.search);
+const selectedKey = (params.get("demo") || "").trim();
+const selected = REGISTRY.find(d => d.key === selectedKey) || null;
+
+const deck     = document.getElementById("launch-deck");
+const grid     = document.getElementById("ld-grid");
+const pill     = document.getElementById("menu-pill");
+const boot     = document.getElementById("ld-boot");
+const bootLbl  = document.getElementById("ld-boot-label");
+const errPanel = document.getElementById("ld-error");
+const errMsg   = document.getElementById("ld-error-msg");
+
+function goHome() {
+    // full reload without ?demo= — unloads the module cleanly
+    location.href = location.pathname;
+}
+
+pill.addEventListener("pointerdown", goHome);
+document.getElementById("ld-error-back").addEventListener("pointerdown", () => {
+    errPanel.style.display = "none";
+    goHome();
+});
+
+// ---------------------------------------------------------------------------
+// LAUNCHER MODE — render cards
+// ---------------------------------------------------------------------------
+if (!selected) {
+    for (const demo of REGISTRY) {
+        const card = document.createElement("div");
+        card.className = "ld-card";
+        card.innerHTML =
+            '<span class="ld-num">MODULE ' + demo.key + '_D</span>' +
+            '<span class="ld-name">' + demo.name + '</span>' +
+            '<span class="ld-desc">' + demo.desc + '</span>' +
+            '<span class="ld-tags">' + demo.tags.map(t => '<span class="ld-tag">' + t + '</span>').join("") + '</span>' +
+            '<button class="ld-launch">▶ LAUNCH</button>';
+        card.querySelector(".ld-launch").addEventListener("pointerdown", () => {
+            location.href = location.pathname + "?demo=" + demo.key;
+        });
+        grid.appendChild(card);
+    }
+}
+// ---------------------------------------------------------------------------
+// DEMO MODE — hide deck, boot overlay, dynamic import
+// ---------------------------------------------------------------------------
+else {
+    deck.style.display = "none";
+    boot.style.display = "flex";
+    bootLbl.textContent = "LOADING " + selected.file.split("/").pop().toUpperCase();
+
+    import(selected.file)
+        .then(() => {
+            boot.style.display = "none";
+            pill.style.display = "block";
+            window.addEventListener("keydown", (e) => {
+                if (e.key === "Escape") { goHome(); }
+            });
+        })
+        .catch((err) => {
+            console.error("[index] demo load failed:", err);
+            boot.style.display = "none";
+            errMsg.textContent = "Failed to load " + selected.file + " — " + (err && err.message ? err.message : String(err));
+            errPanel.style.display = "flex";
+        });
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1741 @@
+<!-- file number : 013
+     full path name : ./006_mat3_demo.html
+     description : Complete standalone launcher for the split 20-stage mat3 showcase.
+                   Preserves the original launcher HTML (manifest, collapsed dropdown,
+                   part select, load/cycle/dispose, status, declared files) and adds:
+                   • Permanent real-time HUD: FPS, frame ms, JS heap MB (performance.memory
+                     when available), tracked GPU buffer MB, live cube count, draw calls.
+                   • Center-locked damped orbit camera — the view always orbits the exact
+                     scene center (0, 2.2, 0); drag to orbit, wheel/pinch to zoom, slow
+                     auto-drift, one requestAnimationFrame render loop, capped pixel ratio.
+                   • Seamless part switching: each ./006_mat3_demo_partN.js is dynamically
+                     imported. When a part parses and boots, it runs natively (heavy UI
+                     hidden, camera pinned to its centered overview, minimal controls
+                     mapped through its public api). When a part file fails to parse,
+                     a faithful internal kernel renders that part's exact 5 stages so the
+                     examples remain visible with zero interruption — status reports
+                     LIVE vs KERNEL honestly per part and per math module.
+                   • Minimal permanently-visible control strip (8 live tools + 5 actions):
+                     speed, density, cube size, glow, palette, quality, auto-orbit,
+                     wireframe, pause, recenter, reset, randomize, export PNG.
+                   All vector/matrix/quaternion math is computed by the provided ./math
+                   modules (002–008); an internal glMatrix-identical kernel fills only
+                   modules that fail to load. Three.js r185 is a GPU carrier only:
+                   matrices uploaded via fromArray / typed-array writes, matrixAutoUpdate
+                   disabled everywhere. Single rAF render loop + single rAF HUD monitor,
+                   chunked non-blocking seeding, pooled scratch, WebGL context recovery,
+                   full dispose, Android 64-bit friendly. No Vite / Vue / build step.
+     best for : 3d graphics presentation and QA — one HTML entry point that keeps all
+                20 mat3 examples visible and interactive across every part file on
+                Android 64-bit mobile and desktop, with live performance telemetry.
+     license : MIT
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#070312" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>⟦M₃⟧ Matrix Lab Launcher — 20 Stages / 4 Parts</title>
+
+  <!-- Required external stylesheet for all four demo parts (kept). -->
+  <link rel="stylesheet" href="./006_mat3_demo.css" />
+
+  <!-- Machine-readable launcher manifest (kept). -->
+  <script type="application/json" id="mat3LauncherManifest">
+    {
+      "css": "./006_mat3_demo.css",
+      "parts": [
+        { "n": 1, "label": "Part 1 — stages 01–05", "file": "./006_mat3_demo_part1.js", "globals": ["__MAT3_LAB_PART1__", "MAT3_LAB_PART1"] },
+        { "n": 2, "label": "Part 2 — stages 06–10", "file": "./006_mat3_demo_part2.js", "globals": ["__MAT3_LAB_PART2__", "MAT3_LAB_PART2"] },
+        { "n": 3, "label": "Part 3 — stages 11–15", "file": "./006_mat3_demo_part3.js", "globals": ["__MAT3_LAB_PART3__", "MAT3_LAB_PART3"] },
+        { "n": 4, "label": "Part 4 — stages 16–20", "file": "./006_mat3_demo_part4.js", "globals": ["__MAT3_LAB_PART4__", "MAT3_LAB_PART4"] }
+      ]
+    }
+  </script>
+
+  <style>
+    /* ==========================================================================
+       LAUNCHER VISUAL SYSTEM — self-sufficient; ./006_mat3_demo.css enhances
+       the native part UI. Palette: Nebula violet field, cyan/magenta/lime/amber
+       accents, semantic ok/warn/bad/info, warm-cool neutrals.
+       ========================================================================== */
+    :root {
+      --dom:#7c3aed; --a1:#22d3ee; --a2:#ff2ea6; --a3:#a3e635; --a4:#ffb020;
+      --bg0:#070312; --bg1:#0d0722; --surf:#140b30; --line:#2a1b55;
+      --ink:#efeaff; --mut:#9d92c9;
+      --ok:#34d399; --warn:#fbbf24; --bad:#fb4d6d; --info:#60a5fa;
+      --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+      --ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+      --st:env(safe-area-inset-top,0px); --sr:env(safe-area-inset-right,0px);
+      --sb:env(safe-area-inset-bottom,0px); --sl:env(safe-area-inset-left,0px);
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    html, body { height:100%; overflow:hidden; overscroll-behavior:none; }
+    body {
+      background:var(--bg0); color:var(--ink); font:14px/1.45 var(--ui);
+      -webkit-font-smoothing:antialiased; -webkit-tap-highlight-color:transparent;
+    }
+    ::-webkit-scrollbar { width:9px; height:9px; }
+    ::-webkit-scrollbar-track { background:var(--bg1); border-radius:8px; }
+    ::-webkit-scrollbar-thumb { background:linear-gradient(180deg,var(--dom),var(--a2)); border-radius:8px; border:2px solid var(--bg1); }
+    ::-webkit-scrollbar-thumb:hover { background:linear-gradient(180deg,var(--a1),var(--a2)); }
+    * { scrollbar-width:thin; scrollbar-color:var(--dom) var(--bg1); }
+
+    #scene {
+      position:fixed; inset:0; width:100%; height:100%; display:block;
+      touch-action:none; cursor:grab; outline:none;
+      background:
+        radial-gradient(circle at 50% 42%, rgba(34,211,238,.07), transparent 44%),
+        radial-gradient(circle at 72% 72%, rgba(255,46,166,.06), transparent 40%),
+        var(--bg0);
+    }
+    #scene.drag { cursor:grabbing; }
+    body.native #scene { display:none; }
+
+    /* ---------- permanent top HUD ---------- */
+    #hudBar {
+      position:fixed; z-index:1200; top:0; left:0; right:0;
+      height:calc(46px + var(--st)); padding:var(--st) calc(10px + var(--sr)) 0 calc(10px + var(--sl));
+      display:flex; align-items:center; gap:10px;
+      background:linear-gradient(90deg, rgba(13,7,34,.92), rgba(20,11,48,.88) 55%, rgba(13,7,34,.92));
+      border-bottom:1px solid var(--line);
+      backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    }
+    #hudBar::after {
+      content:""; position:absolute; left:0; right:0; bottom:-1px; height:2px;
+      background:linear-gradient(90deg,var(--a1),var(--a2),var(--a4),var(--a3)); opacity:.85;
+    }
+    .hud-brand { display:flex; align-items:baseline; gap:8px; white-space:nowrap; min-width:0; }
+    .hud-brand .brk { color:var(--a4); font-weight:800; font-size:17px; }
+    .hud-brand b {
+      font-size:15px; letter-spacing:.4px;
+      background:linear-gradient(90deg,var(--a1),var(--a2));
+      -webkit-background-clip:text; background-clip:text; color:transparent;
+    }
+    .hud-brand small { color:var(--mut); font:10px var(--mono); }
+    #hudStats {
+      margin-left:auto; display:flex; align-items:center; gap:12px;
+      font:11px var(--mono); color:var(--mut); white-space:nowrap;
+      font-variant-numeric:tabular-nums; overflow:hidden;
+    }
+    #hudStats b { color:var(--a1); font-weight:600; }
+    #hudStats .mem b { color:var(--a3); }
+    #hudStats .gpu b { color:var(--a4); }
+    #fpsDot { width:8px; height:8px; border-radius:50%; background:var(--ok); box-shadow:0 0 8px var(--ok); flex:none; }
+    #fpsDot.warn { background:var(--warn); box-shadow:0 0 8px var(--warn); }
+    #fpsDot.bad { background:var(--bad); box-shadow:0 0 8px var(--bad); }
+    .hbtn {
+      background:var(--bg1); border:1px solid var(--line); color:var(--ink);
+      border-radius:9px; padding:6px 10px; min-height:32px; cursor:pointer;
+      font:600 12px var(--ui); white-space:nowrap; touch-action:manipulation;
+      transition:border-color .12s, box-shadow .12s, transform .12s;
+    }
+    .hbtn:hover { border-color:var(--a1); box-shadow:0 0 10px rgba(34,211,238,.3); transform:translateY(-1px); }
+    .hbtn.on { border-color:var(--a3); color:var(--a3); }
+    .hbtn:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline:2px solid var(--a1); outline-offset:2px; }
+
+    /* ---------- launcher dropdown (kept, collapsed by default) ---------- */
+    #launcherPanel {
+      position:fixed; z-index:1300;
+      top:calc(56px + var(--st)); right:calc(12px + var(--sr));
+      width:min(372px, calc(100vw - 24px - var(--sl) - var(--sr)));
+      background:rgba(18,10,38,.94); border:1px solid var(--line); border-radius:14px;
+      box-shadow:0 18px 50px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.03) inset;
+      backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+      overflow:hidden; user-select:none; -webkit-user-select:none;
+    }
+    #launcherPanel > summary {
+      list-style:none; cursor:pointer; padding:11px 14px; min-height:46px;
+      display:flex; align-items:center; gap:10px; font-weight:800; letter-spacing:.2px;
+      background:linear-gradient(90deg, rgba(34,211,238,.12), rgba(255,46,166,.10), transparent);
+      border-bottom:1px solid transparent; touch-action:manipulation;
+    }
+    #launcherPanel > summary::-webkit-details-marker { display:none; }
+    #launcherPanel[open] > summary { border-bottom-color:var(--line); }
+    .launcher-mark {
+      flex:none; width:27px; height:27px; display:grid; place-items:center; border-radius:9px;
+      background:rgba(124,58,237,.28); border:1px solid rgba(124,58,237,.55);
+      color:#d8ccff; font:900 12px var(--mono);
+    }
+    .launcher-title { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .launcher-chevron { flex:none; color:var(--mut); font-family:var(--mono); transition:transform .16s; }
+    #launcherPanel[open] .launcher-chevron { transform:rotate(90deg); }
+    .launcher-body { padding:12px 14px 14px; display:grid; gap:10px; max-height:min(58vh,520px); overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; }
+    .launcher-row { display:grid; gap:6px; }
+    .launcher-label { font-size:10px; letter-spacing:1.6px; text-transform:uppercase; color:var(--mut); font-weight:800; }
+    #partSelect {
+      width:100%; min-height:40px; border-radius:10px; border:1px solid var(--line);
+      background:rgba(6,3,14,.86); color:var(--ink); padding:8px 32px 8px 10px;
+      font:600 13px var(--ui); appearance:none; -webkit-appearance:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' fill='none' stroke='%239d92c9' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat:no-repeat; background-position:right 10px center; background-size:12px;
+    }
+    #partSelect option { background:#0b0618; color:#efeaff; }
+    .launcher-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .launcher-actions.full { grid-template-columns:1fr; }
+    .launcher-btn {
+      min-height:40px; border-radius:10px; border:1px solid var(--line);
+      background:rgba(8,4,18,.82); color:var(--ink); font:800 12px var(--ui);
+      cursor:pointer; padding:8px 10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+      touch-action:manipulation; transition:transform .12s, border-color .12s, box-shadow .12s;
+    }
+    .launcher-btn:hover { transform:translateY(-1px); border-color:var(--a1); box-shadow:0 0 16px rgba(34,211,238,.22); }
+    .launcher-btn.primary { color:#fff; border-color:transparent; background:linear-gradient(90deg,#7c3aed,#ff2ea6); }
+    .launcher-btn.danger { border-color:rgba(251,77,109,.45); color:#ffd7df; }
+    .launcher-btn:disabled { opacity:.5; cursor:wait; transform:none; }
+    .launcher-status {
+      min-height:52px; border-radius:10px; border:1px solid var(--line);
+      background:rgba(4,2,10,.62); padding:9px 10px; color:var(--mut);
+      font:11px/1.5 var(--mono); white-space:pre-wrap; overflow-wrap:anywhere;
+      user-select:text; -webkit-user-select:text;
+    }
+    .launcher-status.ok { color:var(--ok); border-color:rgba(52,211,153,.35); }
+    .launcher-status.warn { color:var(--warn); border-color:rgba(251,191,36,.35); }
+    .launcher-status.bad { color:var(--bad); border-color:rgba(251,77,109,.35); }
+    .launcher-hint { color:var(--mut); font-size:11px; line-height:1.5; user-select:text; -webkit-user-select:text; }
+    .launcher-files { display:grid; gap:3px; font:10px/1.4 var(--mono); color:#9b8fc7; word-break:break-all; }
+    #modStatus { display:flex; flex-wrap:wrap; gap:5px; }
+    .mchip {
+      font:600 9.5px var(--mono); padding:3px 7px; border-radius:20px;
+      border:1px solid var(--line); background:var(--bg1); color:var(--mut);
+      display:inline-flex; align-items:center; gap:5px; cursor:help;
+    }
+    .mchip i { width:6px; height:6px; border-radius:50%; }
+    .mchip.live i { background:var(--ok); box-shadow:0 0 6px var(--ok); }
+    .mchip.kernel i { background:var(--bad); box-shadow:0 0 6px var(--bad); }
+
+    /* ---------- stage chips + info ---------- */
+    #stageChips {
+      position:fixed; z-index:1100; left:calc(10px + var(--sl)); top:calc(56px + var(--st));
+      display:flex; flex-direction:column; gap:6px; max-width:230px;
+    }
+    .schip {
+      display:flex; align-items:center; gap:8px; text-align:left;
+      background:rgba(13,7,34,.85); border:1px solid var(--line); color:var(--ink);
+      border-radius:10px; padding:7px 10px; cursor:pointer; font:600 11.5px var(--ui);
+      backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+      transition:border-color .14s, box-shadow .14s; touch-action:manipulation;
+    }
+    .schip .n { font:700 10px var(--mono); color:var(--a4); }
+    .schip:hover { border-color:var(--a1); }
+    .schip.act { border-color:var(--a2); box-shadow:0 0 12px rgba(255,46,166,.3); }
+    .schip.act .n { color:var(--a2); }
+    #stageInfo {
+      position:fixed; z-index:1100; left:calc(10px + var(--sl)); right:calc(10px + var(--sr));
+      bottom:calc(74px + var(--sb)); pointer-events:none;
+      font:11px/1.5 var(--mono); color:var(--mut);
+      text-shadow:0 1px 4px rgba(0,0,0,.8);
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    #stageInfo b { color:var(--ink); } #stageInfo code { color:var(--a3); } #stageInfo .ro { color:var(--a1); }
+
+    /* ---------- permanent minimal control strip ---------- */
+    #ctrlStrip {
+      position:fixed; z-index:1200; left:0; right:0; bottom:0;
+      min-height:calc(62px + var(--sb)); padding:8px calc(10px + var(--sr)) calc(8px + var(--sb)) calc(10px + var(--sl));
+      display:flex; align-items:center; gap:14px; overflow-x:auto; overflow-y:hidden;
+      background:linear-gradient(180deg, rgba(13,7,34,.9), rgba(7,3,18,.96));
+      border-top:1px solid var(--line);
+      backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+      touch-action:pan-x;
+    }
+    .ctl { flex:none; display:grid; gap:2px; width:118px; }
+    .ctl label { display:flex; justify-content:space-between; font:600 9.5px var(--ui); letter-spacing:.8px; text-transform:uppercase; color:var(--mut); }
+    .ctl output { font:600 9.5px var(--mono); color:var(--a1); }
+    .ctl input[type=range] { width:100%; height:22px; -webkit-appearance:none; appearance:none; background:transparent; cursor:pointer; }
+    .ctl input[type=range]::-webkit-slider-runnable-track { height:4px; border-radius:4px; background:linear-gradient(90deg,var(--dom),var(--a1)); }
+    .ctl input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:15px; height:15px; border-radius:50%; background:var(--ink); border:2px solid var(--a2); margin-top:-5.5px; box-shadow:0 0 7px rgba(255,46,166,.5); }
+    .ctl input[type=range]::-moz-range-track { height:4px; border-radius:4px; background:linear-gradient(90deg,var(--dom),var(--a1)); }
+    .ctl input[type=range]::-moz-range-thumb { width:13px; height:13px; border-radius:50%; background:var(--ink); border:2px solid var(--a2); }
+    .ctl select {
+      width:100%; min-height:26px; background:var(--bg0); color:var(--ink);
+      border:1px solid var(--line); border-radius:7px; padding:3px 6px; font:600 11px var(--ui); cursor:pointer;
+    }
+    .tgl { flex:none; display:grid; gap:3px; justify-items:center; }
+    .tgl span { font:600 9.5px var(--ui); letter-spacing:.8px; text-transform:uppercase; color:var(--mut); }
+    .tgl button {
+      width:42px; height:22px; border-radius:20px; border:1px solid var(--line);
+      background:var(--bg0); position:relative; cursor:pointer; touch-action:manipulation;
+    }
+    .tgl button::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:var(--mut); transition:left .15s, background .15s; }
+    .tgl button[aria-pressed=true] { background:rgba(124,58,237,.4); border-color:var(--a1); }
+    .tgl button[aria-pressed=true]::after { left:22px; background:var(--a1); box-shadow:0 0 7px var(--a1); }
+    .strip-sep { flex:none; width:1px; height:36px; background:linear-gradient(180deg,transparent,var(--line),transparent); }
+    .abtn {
+      flex:none; min-height:36px; padding:7px 12px; border-radius:9px;
+      border:1px solid var(--line); background:var(--bg0); color:var(--ink);
+      font:700 11.5px var(--ui); cursor:pointer; white-space:nowrap; touch-action:manipulation;
+      transition:transform .12s, border-color .12s, box-shadow .12s;
+    }
+    .abtn:hover { transform:translateY(-1px); border-color:var(--a2); box-shadow:0 0 12px rgba(255,46,166,.28); }
+    .abtn.pri { color:#fff; border-color:transparent; background:linear-gradient(90deg,var(--dom),var(--a2)); }
+
+    /* ---------- help / toasts / boot ---------- */
+    #helpOverlay {
+      position:fixed; inset:0; z-index:1400; display:none; align-items:center; justify-content:center;
+      background:rgba(4,2,10,.8); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+      padding:calc(18px + var(--st)) calc(18px + var(--sr)) calc(18px + var(--sb)) calc(18px + var(--sl));
+    }
+    #helpOverlay.open { display:flex; }
+    .hcard {
+      background:var(--bg1); border:1px solid var(--line); border-radius:16px;
+      max-width:720px; width:100%; max-height:86vh; overflow-y:auto; padding:20px 22px; position:relative;
+    }
+    .hcard h2 { font-size:16px; margin-bottom:6px; padding-right:80px;
+      background:linear-gradient(90deg,var(--a1),var(--a2)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    .hcard p { color:var(--mut); font-size:12px; margin-bottom:10px; }
+    .hcard h4 { font-size:10px; letter-spacing:1.6px; text-transform:uppercase; color:var(--a4); margin:10px 0 6px; }
+    .hcard table { width:100%; border-collapse:collapse; font-size:11px; }
+    .hcard td { padding:4px 6px; border-bottom:1px solid var(--line); }
+    .hcard td:first-child { font-family:var(--mono); color:var(--a1); white-space:nowrap; }
+    .hcard .x { position:absolute; top:12px; right:12px; }
+    #toasts {
+      position:fixed; z-index:1500; bottom:calc(78px + var(--sb)); left:50%; transform:translateX(-50%);
+      display:flex; flex-direction:column; gap:6px; align-items:center; pointer-events:none; width:min(92vw,520px);
+    }
+    .toast {
+      background:rgba(20,11,48,.94); border:1px solid var(--a1); color:var(--ink);
+      padding:8px 16px; border-radius:10px; font:600 12px var(--ui); text-align:center;
+      box-shadow:0 4px 24px rgba(0,0,0,.5); animation:tin .25s ease; overflow-wrap:anywhere;
+    }
+    @keyframes tin { from { opacity:0; transform:translateY(8px);} to { opacity:1; transform:none;} }
+    #boot {
+      position:fixed; inset:0; z-index:1600; background:var(--bg0);
+      display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px;
+      transition:opacity .5s; padding:20px;
+    }
+    #boot.gone { opacity:0; pointer-events:none; }
+    #boot .bt { font-size:22px; font-weight:800; text-align:center;
+      background:linear-gradient(90deg,var(--a1),var(--a2),var(--a4)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    #boot .bs { font:12px var(--mono); color:var(--mut); text-align:center; max-width:560px; min-height:1.4em; }
+    #boot .bar { width:220px; max-width:70vw; height:4px; border-radius:4px; background:var(--bg1); overflow:hidden; }
+    #boot .bar i { display:block; height:100%; width:40%; border-radius:4px; background:linear-gradient(90deg,var(--a1),var(--a2)); animation:load 1.1s ease-in-out infinite; }
+    @keyframes load { 0% { transform:translateX(-100%);} 100% { transform:translateX(320%);} }
+    #boot .err { color:var(--bad); font:12px var(--mono); max-width:560px; text-align:center; display:none; white-space:pre-wrap; }
+
+    /* ---------- native part integration: minimal UI, centered overview ---------- */
+    body.native #stageChips, body.native #stageInfo { display:none; }
+    body.native #lab#lab { grid-template-columns:0 1fr 0 !important; grid-template-rows:0 1fr 46px !important; }
+    body.native #lab#lab header, body.native #lab#lab #examples, body.native #lab#lab #controls { display:none !important; }
+    body.native #lab#lab footer { padding-top:0; }
+    body.native #hudBar { background:linear-gradient(90deg, rgba(13,7,34,.8), rgba(20,11,48,.72) 55%, rgba(13,7,34,.8)); }
+
+    @media (max-width:760px) {
+      .hud-brand small { display:none; }
+      #hudStats { gap:8px; font-size:10px; }
+      #hudStats .hide-sm { display:none; }
+      #stageChips { flex-direction:row; left:calc(8px + var(--sl)); right:calc(8px + var(--sr)); max-width:none; overflow-x:auto; padding-bottom:4px; }
+      .schip { flex:none; white-space:nowrap; }
+      #stageInfo { bottom:calc(70px + var(--sb)); font-size:10px; }
+      .ctl { width:104px; }
+      #launcherPanel { top:auto; bottom:calc(72px + var(--sb)); }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      .hbtn:hover, .abtn:hover, .launcher-btn:hover { transform:none; }
+      .toast, #boot .bar i { animation:none; }
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="scene" aria-label="Matrix Lab 3D scene — drag to orbit, wheel or pinch to zoom"></canvas>
+
+  <!-- Permanent real-time HUD: FPS + memory + scene telemetry + global sound/help. -->
+  <header id="hudBar">
+    <div class="hud-brand"><span class="brk">⟦M₃⟧</span><b>MATRIX LAB</b><small>20 stages · three r185</small></div>
+    <div id="hudStats" aria-live="off">
+      <span id="fpsDot" aria-hidden="true"></span>
+      <span><b id="hFps">--</b> fps</span>
+      <span class="hide-sm"><b id="hMs">--</b> ms</span>
+      <span class="mem"><b id="hHeap">--</b> heap</span>
+      <span class="gpu hide-sm"><b id="hGpu">--</b> gpu</span>
+      <span class="hide-sm"><b id="hCubes">0</b> cubes</span>
+      <span class="hide-sm"><b id="hCalls">0</b> calls</span>
+    </div>
+    <button class="hbtn on" id="sndBtn" title="Mute / unmute all sound (M)">♪ ON</button>
+    <button class="hbtn" id="helpBtn" title="Help & diagnostics (H)">?</button>
+    <button class="hbtn" id="panelBtn" title="Open / close the part launcher">☰ Parts</button>
+  </header>
+
+  <!-- Launcher dropdown (kept — starts collapsed). -->
+  <details id="launcherPanel">
+    <summary aria-controls="launcherBody">
+      <span class="launcher-mark">M₃</span>
+      <span class="launcher-title">Matrix Lab Launcher</span>
+      <span class="launcher-chevron">▸</span>
+    </summary>
+    <div class="launcher-body" id="launcherBody">
+      <div class="launcher-row">
+        <div class="launcher-label">Runtime part</div>
+        <select id="partSelect" aria-label="Select mat3 demo part">
+          <option value="0">Attract scene — centered orbit</option>
+          <option value="1">Part 1 — stages 01–05</option>
+          <option value="2">Part 2 — stages 06–10</option>
+          <option value="3">Part 3 — stages 11–15</option>
+          <option value="4">Part 4 — stages 16–20</option>
+        </select>
+      </div>
+      <div class="launcher-actions">
+        <button id="loadBtn" class="launcher-btn primary" type="button">Load selected</button>
+        <button id="cycleBtn" class="launcher-btn" type="button">Cycle next</button>
+      </div>
+      <div class="launcher-actions full">
+        <button id="disposeBtn" class="launcher-btn danger" type="button">Dispose demo / return to attract</button>
+      </div>
+      <div id="launcherStatus" class="launcher-status" aria-live="polite">Initializing…</div>
+      <div class="launcher-row">
+        <div class="launcher-label">Math modules (./math)</div>
+        <div id="modStatus"></div>
+      </div>
+      <div class="launcher-hint">
+        Each part file is imported live. If a file currently fails to parse, the launcher
+        renders that part's exact five stages with its internal glMatrix-identical kernel
+        so the examples stay visible — the status above reports LIVE vs KERNEL honestly.
+        The orbit camera always stays centered on the scene center.
+      </div>
+      <div class="launcher-row">
+        <div class="launcher-label">Declared files</div>
+        <div class="launcher-files">
+          ./006_mat3_demo.css<br />./006_mat3_demo_part1.js<br />./006_mat3_demo_part2.js<br />
+          ./006_mat3_demo_part3.js<br />./006_mat3_demo_part4.js
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <nav id="stageChips" aria-label="Stages in the active part"></nav>
+  <div id="stageInfo"></div>
+
+  <!-- Permanent minimal control strip — every tool applies live. -->
+  <footer id="ctrlStrip">
+    <div class="ctl"><label>Speed <output id="oSpeed">1.00×</output></label>
+      <input id="cSpeed" type="range" min="0" max="2" step="0.01" value="1" aria-label="Animation speed"></div>
+    <div class="ctl"><label>Cubes / stage <output id="oDensity">1024</output></label>
+      <input id="cDensity" type="range" min="128" max="8192" step="64" value="1024" aria-label="Cubes per stage"></div>
+    <div class="ctl"><label>Cube size <output id="oSize">1.00</output></label>
+      <input id="cSize" type="range" min="0.3" max="2" step="0.01" value="1" aria-label="Cube size"></div>
+    <div class="ctl"><label>Glow <output id="oGlow">1.10</output></label>
+      <input id="cGlow" type="range" min="0" max="2.5" step="0.01" value="1.1" aria-label="Emissive glow"></div>
+    <div class="ctl"><label>Palette</label>
+      <select id="cPalette" aria-label="Palette">
+        <option value="nebula">Nebula</option><option value="ember">Ember</option><option value="aurora">Aurora</option>
+      </select></div>
+    <div class="ctl"><label>Quality</label>
+      <select id="cQuality" aria-label="Quality (pixel ratio cap)">
+        <option value="0.75">Eco · 0.75×</option><option value="1">Balanced · 1×</option>
+        <option value="1.5" selected>Sharp · 1.5×</option><option value="2">Ultra · 2×</option>
+      </select></div>
+    <div class="tgl"><span>Orbit</span><button id="cOrbit" aria-pressed="true" aria-label="Auto-orbit drift"></button></div>
+    <div class="tgl"><span>Wire</span><button id="cWire" aria-pressed="false" aria-label="Wireframe"></button></div>
+    <div class="strip-sep"></div>
+    <button class="abtn" id="bPause" type="button">⏸ Pause</button>
+    <button class="abtn" id="bCenter" type="button">⌖ Recenter</button>
+    <button class="abtn" id="bReset" type="button">↺ Reset</button>
+    <button class="abtn" id="bRandom" type="button">⚄ Randomize</button>
+    <button class="abtn pri" id="bExport" type="button">⬇ PNG</button>
+  </footer>
+
+  <div id="helpOverlay" role="dialog" aria-modal="true"></div>
+  <div id="toasts"></div>
+
+  <div id="boot">
+    <div class="bt">⟦M₃⟧ MATRIX LAB</div>
+    <div class="bar"><i></i></div>
+    <div class="bs" id="bootMsg">loading ./math modules…</div>
+    <div class="err" id="bootErr"></div>
+    <button class="hbtn" id="bootRetry" style="display:none">Retry</button>
+  </div>
+
+  <script type="module">
+  // ==========================================================================
+  // 0. CONSTANTS / DOM / MANIFEST
+  // ==========================================================================
+  const TAU = Math.PI * 2;
+  const CAP = 8192;                 // per-stage instance capacity (5 stages live)
+  const RING_R = 14;                // station ring radius
+  const CENTER_Y = 2.2;             // orbit pivot height — exact scene center
+  const THREE_URLS = [
+    "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+    "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.min.js",
+    "https://unpkg.com/three@0.185.0/build/three.module.js",
+    "https://esm.sh/three@0.185.0"
+  ];
+  const $ = (id) => document.getElementById(id);
+  const canvas = $("scene"), panel = $("launcherPanel"), select = $("partSelect");
+  const loadBtn = $("loadBtn"), cycleBtn = $("cycleBtn"), disposeBtn = $("disposeBtn");
+  const statusEl = $("launcherStatus"), chipsEl = $("stageChips"), infoEl = $("stageInfo");
+  const bootEl = $("boot"), bootMsg = $("bootMsg"), bootErr = $("bootErr"), bootRetry = $("bootRetry");
+  const helpEl = $("helpOverlay"), toastsEl = $("toasts");
+
+  const manifest = JSON.parse($("mat3LauncherManifest").textContent);
+  const PARTS = manifest.parts;
+
+  const S = {
+    speed: 1, density: 1024, cubeSize: 1, glow: 1.1,
+    palette: "nebula", quality: 1.5, autoOrbit: true, wireframe: false,
+    playing: true, sound: true, seed: 1, part: 0, selected: -1, loopSec: 12
+  };
+
+  function setStatus(msg, kind) {
+    statusEl.textContent = msg;
+    statusEl.classList.remove("ok", "warn", "bad");
+    if (kind) statusEl.classList.add(kind);
+  }
+  function errText(e) { return e ? (e.message || String(e)) : "Unknown error"; }
+  const toastPool = [];
+  function toast(msg) {
+    const t = toastPool.pop() || document.createElement("div");
+    t.className = "toast"; t.textContent = msg; t.style.opacity = "1";
+    toastsEl.appendChild(t);
+    while (toastsEl.children.length > 3) { const o = toastsEl.firstChild; o.remove(); toastPool.push(o); }
+    setTimeout(() => { t.style.opacity = "0"; t.style.transition = "opacity .3s";
+      setTimeout(() => { t.remove(); if (toastPool.length < 10) toastPool.push(t); }, 320); }, 2400);
+  }
+  function mulberry32(seed) {
+    let a = seed | 0;
+    return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  function hash3(x, y, z) {
+    let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(z | 0, 2246822519)) | 0;
+    h = (h ^ (h >>> 13)) | 0; h = Math.imul(h, 1274126177) | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  }
+  const pingpong = (p) => 0.5 - 0.5 * Math.cos(TAU * p);
+  const smooth01 = (t) => t * t * (3 - 2 * t);
+  function yieldMain() { return new Promise((r) => setTimeout(r, 0)); }
+  async function chunked(n, fn, alive, size) {
+    size = size || 4096; let c = 0;
+    for (let s = 0; s < n; s += size) {
+      if (alive && !alive()) return false;
+      const e = Math.min(s + size, n);
+      for (let i = s; i < e; i++) fn(i);
+      if (++c >= 4) { c = 0; await yieldMain(); }
+    }
+    return true;
+  }
+
+  // ==========================================================================
+  // 1. EMERGENCY MATH KERNEL — glMatrix-identical; fills only failed modules.
+  // ==========================================================================
+  const K = {
+    vec2: { distance: (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]) },
+    vec3: {
+      set: (o, x, y, z) => { o[0] = x; o[1] = y; o[2] = z; return o; },
+      add: (o, a, b) => { o[0] = a[0] + b[0]; o[1] = a[1] + b[1]; o[2] = a[2] + b[2]; return o; },
+      subtract: (o, a, b) => { o[0] = a[0] - b[0]; o[1] = a[1] - b[1]; o[2] = a[2] - b[2]; return o; },
+      scale: (o, a, s) => { o[0] = a[0] * s; o[1] = a[1] * s; o[2] = a[2] * s; return o; },
+      scaleAndAdd: (o, a, b, s) => { o[0] = a[0] + b[0] * s; o[1] = a[1] + b[1] * s; o[2] = a[2] + b[2] * s; return o; },
+      normalize: (o, a) => { const x = a[0], y = a[1], z = a[2]; let l = x * x + y * y + z * z; if (l > 0) l = 1 / Math.sqrt(l); o[0] = x * l; o[1] = y * l; o[2] = z * l; return o; },
+      length: (a) => Math.hypot(a[0], a[1], a[2]),
+      dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+      cross: (o, a, b) => { const ax = a[0], ay = a[1], az = a[2], bx = b[0], by = b[1], bz = b[2];
+        o[0] = ay * bz - az * by; o[1] = az * bx - ax * bz; o[2] = ax * by - ay * bx; return o; },
+      transformMat3: (o, a, m) => { const x = a[0], y = a[1], z = a[2];
+        o[0] = m[0] * x + m[3] * y + m[6] * z; o[1] = m[1] * x + m[4] * y + m[7] * z; o[2] = m[2] * x + m[5] * y + m[8] * z; return o; },
+      springDamp3: (out, cur, tgt, vel, st, dt, ms) => {
+        st = Math.max(1e-4, st); ms = ms === undefined ? Infinity : ms;
+        const om = 2 / st, x = om * dt, ex = 1 / (1 + x + .48 * x * x + .235 * x * x * x), mc = ms * st;
+        for (let i = 0; i < 3; i++) {
+          const c = cur[i]; let t = tgt[i]; const ot = t; let ch = c - t;
+          if (ch > mc) ch = mc; else if (ch < -mc) ch = -mc;
+          t = c - ch; const tp = (vel[i] + om * ch) * dt;
+          vel[i] = (vel[i] - om * tp) * ex; let o = t + (ch + tp) * ex;
+          if ((ot - c > 0) === (o > ot)) { o = ot; vel[i] = (o - ot) / dt; }
+          out[i] = o;
+        } return out;
+      },
+      fabrikStep3: (pos, lens, target, tol) => {
+        const n = lens.length + 1, li = (n - 1) * 3;
+        const dx = target[0] - pos[li], dy = target[1] - pos[li + 1], dz = target[2] - pos[li + 2];
+        if (Math.hypot(dx, dy, dz) < tol) return 0;
+        const rx = pos[0], ry = pos[1], rz = pos[2];
+        pos[li] = target[0]; pos[li + 1] = target[1]; pos[li + 2] = target[2];
+        for (let i = n - 2; i >= 0; i--) {
+          const a = i * 3, b = a + 3, ex = pos[b] - pos[a], ey = pos[b + 1] - pos[a + 1], ez = pos[b + 2] - pos[a + 2];
+          const d = Math.hypot(ex, ey, ez) || 1e-9, r = lens[i] / d;
+          pos[a] = pos[b] - ex * r; pos[a + 1] = pos[b + 1] - ey * r; pos[a + 2] = pos[b + 2] - ez * r;
+        }
+        pos[0] = rx; pos[1] = ry; pos[2] = rz;
+        for (let j = 1; j < n; j++) {
+          const a = j * 3, b = (j - 1) * 3, ex = pos[a] - pos[b], ey = pos[a + 1] - pos[b + 1], ez = pos[a + 2] - pos[b + 2];
+          const d = Math.hypot(ex, ey, ez) || 1e-9, r = lens[j - 1] / d;
+          pos[a] = pos[b] + ex * r; pos[a + 1] = pos[b + 1] + ey * r; pos[a + 2] = pos[b + 2] + ez * r;
+        }
+        return Math.hypot(pos[li] - target[0], pos[li + 1] - target[1], pos[li + 2] - target[2]);
+      },
+      keplerOrbit3D: (out, a, e, M, inc, Om, om) => {
+        let E = M; for (let i = 0; i < 8; i++) E -= (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+        const xp = a * (Math.cos(E) - e), yp = a * Math.sqrt(Math.max(0, 1 - e * e)) * Math.sin(E);
+        const cw = Math.cos(om), sw = Math.sin(om), x1 = xp * cw - yp * sw, y1 = xp * sw + yp * cw;
+        const ci = Math.cos(inc), si = Math.sin(inc), y2 = y1 * ci, z2 = y1 * si;
+        const cO = Math.cos(Om), sO = Math.sin(Om);
+        out[0] = x1 * cO - y2 * sO; out[1] = x1 * sO + y2 * cO; out[2] = z2; return out;
+      }
+    },
+    vec4: {
+      set: (o, x, y, z, w) => { o[0] = x; o[1] = y; o[2] = z; o[3] = w; return o; },
+      transformMat4: (o, a, m) => { const x = a[0], y = a[1], z = a[2], w = a[3];
+        o[0] = m[0] * x + m[4] * y + m[8] * z + m[12] * w; o[1] = m[1] * x + m[5] * y + m[9] * z + m[13] * w;
+        o[2] = m[2] * x + m[6] * y + m[10] * z + m[14] * w; o[3] = m[3] * x + m[7] * y + m[11] * z + m[15] * w; return o; }
+    },
+    mat2: {
+      fromRotation: (o, r) => { const s = Math.sin(r), c = Math.cos(r); o[0] = c; o[1] = s; o[2] = -s; o[3] = c; return o; },
+      fromShear: (o, kx, ky) => { o[0] = 1; o[1] = kx; o[2] = ky; o[3] = 1; return o; },
+      multiply: (o, a, b) => { const a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3], b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3];
+        o[0] = a0 * b0 + a2 * b1; o[1] = a1 * b0 + a3 * b1; o[2] = a0 * b2 + a2 * b3; o[3] = a1 * b2 + a3 * b3; return o; }
+    },
+    mat3: {
+      identity: (o) => { o[0] = 1; o[1] = 0; o[2] = 0; o[3] = 0; o[4] = 1; o[5] = 0; o[6] = 0; o[7] = 0; o[8] = 1; return o; },
+      copy: (o, a) => { for (let i = 0; i < 9; i++) o[i] = a[i]; return o; },
+      set: (o, a, b, c, d, e, f, g, h, i) => { o[0] = a; o[1] = b; o[2] = c; o[3] = d; o[4] = e; o[5] = f; o[6] = g; o[7] = h; o[8] = i; return o; },
+      multiply: (o, a, b) => {
+        const a00 = a[0], a01 = a[1], a02 = a[2], a10 = a[3], a11 = a[4], a12 = a[5], a20 = a[6], a21 = a[7], a22 = a[8];
+        const b00 = b[0], b01 = b[1], b02 = b[2], b10 = b[3], b11 = b[4], b12 = b[5], b20 = b[6], b21 = b[7], b22 = b[8];
+        o[0] = b00 * a00 + b01 * a10 + b02 * a20; o[1] = b00 * a01 + b01 * a11 + b02 * a21; o[2] = b00 * a02 + b01 * a12 + b02 * a22;
+        o[3] = b10 * a00 + b11 * a10 + b12 * a20; o[4] = b10 * a01 + b11 * a11 + b12 * a21; o[5] = b10 * a02 + b11 * a12 + b12 * a22;
+        o[6] = b20 * a00 + b21 * a10 + b22 * a20; o[7] = b20 * a01 + b21 * a11 + b22 * a21; o[8] = b20 * a02 + b21 * a12 + b22 * a22; return o;
+      },
+      multiplyScalar: (o, a, s) => { for (let i = 0; i < 9; i++) o[i] = a[i] * s; return o; },
+      add: (o, a, b) => { for (let i = 0; i < 9; i++) o[i] = a[i] + b[i]; return o; },
+      fromQuat: (o, q) => {
+        const x = q[0], y = q[1], z = q[2], w = q[3], x2 = x + x, y2 = y + y, z2 = z + z;
+        const xx = x * x2, yx = y * x2, yy = y * y2, zx = z * x2, zy = z * y2, zz = z * z2, wx = w * x2, wy = w * y2, wz = w * z2;
+        o[0] = 1 - yy - zz; o[1] = yx + wz; o[2] = zx - wy; o[3] = yx - wz; o[4] = 1 - xx - zz; o[5] = zy + wx;
+        o[6] = zx + wy; o[7] = zy - wx; o[8] = 1 - xx - yy; return o;
+      },
+      fromInclination: (o, inc, Om) => {
+        const ci = Math.cos(inc), si = Math.sin(inc), cO = Math.cos(Om), sO = Math.sin(Om);
+        o[0] = cO; o[1] = sO; o[2] = 0; o[3] = -sO * ci; o[4] = cO * ci; o[5] = si; o[6] = sO * si; o[7] = -cO * si; o[8] = ci; return o;
+      },
+      fromOrbitalFrame: (o, inc, Om, om) => {
+        const cw = Math.cos(om), sw = Math.sin(om), ci = Math.cos(inc), si = Math.sin(inc), cO = Math.cos(Om), sO = Math.sin(Om);
+        const r00 = cO * cw - sO * sw * ci, r01 = -cO * sw - sO * cw * ci, r02 = sO * si;
+        const r10 = sO * cw + cO * sw * ci, r11 = -sO * sw + cO * cw * ci, r12 = -cO * si;
+        o[0] = r00; o[1] = r10; o[2] = r02; o[3] = r01; o[4] = r11; o[5] = r12; o[6] = r20v(si, sw); o[7] = cw * si; o[8] = ci; return o;
+        function r20v(si, sw) { return sw * si; }
+      },
+      fromGrayscale: (o) => { const r = .2126, g = .7152, b = .0722;
+        o[0] = r; o[1] = g; o[2] = b; o[3] = r; o[4] = g; o[5] = b; o[6] = r; o[7] = g; o[8] = b; return o; },
+      fromSaturation: (o, s) => { const r = .2126, g = .7152, b = .0722, v = 1 - s;
+        o[0] = r * v + s; o[1] = g * v; o[2] = b * v; o[3] = r * v; o[4] = g * v + s; o[5] = b * v; o[6] = r * v; o[7] = g * v; o[8] = b * v + s; return o; },
+      fromChannelMix: (o, a, b, c, d, e, f, g, h, i) => K.mat3.set(o, a, b, c, d, e, f, g, h, i),
+      fromHueRotation: (o, rad) => {
+        const cA = Math.cos(rad), sA = Math.sin(rad);
+        const yr = .299, yg = .587, yb = .114, ir = .596, ig = -.274, ib = -.322, qr = .211, qg = -.523, qb = .312;
+        const nir = cA * ir - sA * qr, nig = cA * ig - sA * qg, nib = cA * ib - sA * qb;
+        const nqr = sA * ir + cA * qr, nqg = sA * ig + cA * qg, nqb = sA * ib + cA * qb;
+        o[0] = yr + .956 * nir + .621 * nqr; o[1] = yg + .956 * nig + .621 * nqg; o[2] = yb + .956 * nib + .621 * nqb;
+        o[3] = yr - .272 * nir - .647 * nqr; o[4] = yg - .272 * nig - .647 * nqg; o[5] = yb - .272 * nib - .647 * nqb;
+        o[6] = yr - 1.106 * nir + 1.703 * nqr; o[7] = yg - 1.106 * nig + 1.703 * nqg; o[8] = yb - 1.106 * nib + 1.703 * nqb; return o;
+      },
+      decompose: (out, m) => {
+        const sx = Math.hypot(m[0], m[1], m[2]) || 1e-9, sy = Math.hypot(m[3], m[4], m[5]) || 1e-9, sz = Math.hypot(m[6], m[7], m[8]) || 1e-9;
+        out[0] = sx; out[1] = sy; out[2] = sz;
+        const ix = 1 / sx, iy = 1 / sy, iz = 1 / sz;
+        const r00 = m[0] * ix, r01 = m[1] * ix, r02 = m[2] * ix, r10 = m[3] * iy, r11 = m[4] * iy, r12 = m[5] * iy, r20 = m[6] * iz, r21 = m[7] * iz, r22 = m[8] * iz;
+        const tr = r00 + r11 + r22; let S2;
+        if (tr > 0) { S2 = Math.sqrt(tr + 1) * 2; out[6] = .25 * S2; out[3] = (r12 - r21) / S2; out[4] = (r20 - r02) / S2; out[5] = (r01 - r10) / S2; }
+        else if (r00 > r11 && r00 > r22) { S2 = Math.sqrt(1 + r00 - r11 - r22) * 2; out[6] = (r12 - r21) / S2; out[3] = .25 * S2; out[4] = (r01 + r10) / S2; out[5] = (r20 + r02) / S2; }
+        else if (r11 > r22) { S2 = Math.sqrt(1 + r11 - r00 - r22) * 2; out[6] = (r20 - r02) / S2; out[3] = (r01 + r10) / S2; out[4] = .25 * S2; out[5] = (r12 + r21) / S2; }
+        else { S2 = Math.sqrt(1 + r22 - r00 - r11) * 2; out[6] = (r01 - r10) / S2; out[3] = (r20 + r02) / S2; out[4] = (r12 + r21) / S2; out[5] = .25 * S2; }
+        return out;
+      },
+      compose: (o, sx, sy, sz, qx, qy, qz, qw) => {
+        _kq[0] = qx; _kq[1] = qy; _kq[2] = qz; _kq[3] = qw; K.quat.normalize(_kq, _kq);
+        K.mat3.fromQuat(o, _kq);
+        o[0] *= sx; o[1] *= sx; o[2] *= sx; o[3] *= sy; o[4] *= sy; o[5] *= sy; o[6] *= sz; o[7] *= sz; o[8] *= sz; return o;
+      },
+      blendRotation: (o, a, b, t) => {
+        K.mat3.decompose(_kda, a); K.mat3.decompose(_kdb, b);
+        _ka[0] = _kda[3]; _ka[1] = _kda[4]; _ka[2] = _kda[5]; _ka[3] = _kda[6];
+        _kb[0] = _kdb[3]; _kb[1] = _kdb[4]; _kb[2] = _kdb[5]; _kb[3] = _kdb[6];
+        K.quat.slerp(_kq, _ka, _kb, t);
+        return K.mat3.compose(o, _kda[0] + t * (_kdb[0] - _kda[0]), _kda[1] + t * (_kdb[1] - _kda[1]), _kda[2] + t * (_kdb[2] - _kda[2]), _kq[0], _kq[1], _kq[2], _kq[3]);
+      }
+    },
+    mat4: {
+      lookAt: (o, eye, ctr, up) => {
+        let z0 = eye[0] - ctr[0], z1 = eye[1] - ctr[1], z2 = eye[2] - ctr[2];
+        let l = Math.hypot(z0, z1, z2); if (l < 1e-9) { z0 = 0; z1 = 0; z2 = 1; } else { l = 1 / l; z0 *= l; z1 *= l; z2 *= l; }
+        let x0 = up[1] * z2 - up[2] * z1, x1 = up[2] * z0 - up[0] * z2, x2 = up[0] * z1 - up[1] * z0;
+        l = Math.hypot(x0, x1, x2); if (l) { l = 1 / l; x0 *= l; x1 *= l; x2 *= l; } else { x0 = 1; x1 = 0; x2 = 0; }
+        const y0 = z1 * x2 - z2 * x1, y1 = z2 * x0 - z0 * x2, y2 = z0 * x1 - z1 * x0;
+        o[0] = x0; o[1] = y0; o[2] = z0; o[3] = 0; o[4] = x1; o[5] = y1; o[6] = z1; o[7] = 0; o[8] = x2; o[9] = y2; o[10] = z2; o[11] = 0;
+        o[12] = -(x0 * eye[0] + x1 * eye[1] + x2 * eye[2]); o[13] = -(y0 * eye[0] + y1 * eye[1] + y2 * eye[2]); o[14] = -(z0 * eye[0] + z1 * eye[1] + z2 * eye[2]); o[15] = 1; return o;
+      },
+      perspectiveNO: (o, fovy, aspect, near, far) => {
+        const f = 1 / Math.tan(fovy / 2); o.fill(0); o[0] = f / aspect; o[5] = f; o[11] = -1;
+        const nf = 1 / (near - far); o[10] = (far + near) * nf; o[14] = 2 * far * near * nf; return o;
+      },
+      invert: (o, a) => {
+        const a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3], a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7];
+        const a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11], a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
+        const b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10, b03 = a01 * a12 - a02 * a11;
+        const b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12, b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30;
+        const b08 = a20 * a33 - a23 * a30, b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+        let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+        if (!det) return null; det = 1 / det;
+        o[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det; o[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
+        o[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det; o[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+        o[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det; o[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
+        o[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det; o[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+        o[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det; o[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
+        o[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det; o[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+        o[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det; o[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
+        o[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det; o[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det; return o;
+      },
+      fromMat3Translation: (o, m, v) => {
+        o[0] = m[0]; o[1] = m[1]; o[2] = m[2]; o[3] = 0; o[4] = m[3]; o[5] = m[4]; o[6] = m[5]; o[7] = 0;
+        o[8] = m[6]; o[9] = m[7]; o[10] = m[8]; o[11] = 0; o[12] = v[0]; o[13] = v[1]; o[14] = v[2]; o[15] = 1; return o;
+      }
+    },
+    quat: {
+      identity: (o) => { o[0] = 0; o[1] = 0; o[2] = 0; o[3] = 1; return o; },
+      setAxisAngle: (o, ax, rad) => { const h = rad * .5, s = Math.sin(h); o[0] = ax[0] * s; o[1] = ax[1] * s; o[2] = ax[2] * s; o[3] = Math.cos(h); return o; },
+      normalize: (o, a) => { const x = a[0], y = a[1], z = a[2], w = a[3]; let l = Math.hypot(x, y, z, w); if (l > 0) l = 1 / l;
+        o[0] = x * l; o[1] = y * l; o[2] = z * l; o[3] = w * l; return o; },
+      multiply: (o, a, b) => { const ax = a[0], ay = a[1], az = a[2], aw = a[3], bx = b[0], by = b[1], bz = b[2], bw = b[3];
+        o[0] = ax * bw + aw * bx + ay * bz - az * by; o[1] = ay * bw + aw * by + az * bx - ax * bz;
+        o[2] = az * bw + aw * bz + ax * by - ay * bx; o[3] = aw * bw - ax * bx - ay * by - az * bz; return o; },
+      slerp: (o, a, b, t) => {
+        let ax = a[0], ay = a[1], az = a[2], aw = a[3], bx = b[0], by = b[1], bz = b[2], bw = b[3];
+        let c = ax * bx + ay * by + az * bz + aw * bw;
+        if (c < 0) { c = -c; bx = -bx; by = -by; bz = -bz; bw = -bw; }
+        let s0, s1;
+        if (1 - c > 1e-6) { const om = Math.acos(c), si = Math.sin(om); s0 = Math.sin((1 - t) * om) / si; s1 = Math.sin(t * om) / si; }
+        else { s0 = 1 - t; s1 = t; }
+        o[0] = s0 * ax + s1 * bx; o[1] = s0 * ay + s1 * by; o[2] = s0 * az + s1 * bz; o[3] = s0 * aw + s1 * bw;
+        return K.quat.normalize(o, o);
+      },
+      fromEuler: (o, x, y, z) => { // zyx, degrees
+        const h = Math.PI / 360; x *= h; y *= h; z *= h;
+        const sx = Math.sin(x), cx = Math.cos(x), sy = Math.sin(y), cy = Math.cos(y), sz = Math.sin(z), cz = Math.cos(z);
+        o[0] = sx * cy * cz - cx * sy * sz; o[1] = cx * sy * cz + sx * cy * sz; o[2] = cx * cy * sz - sx * sy * cz; o[3] = cx * cy * cz + sx * sy * sz; return o;
+      }
+    }
+  };
+  const _kq = new Float32Array(4), _ka = new Float32Array(4), _kb = new Float32Array(4);
+  const _kda = new Float32Array(7), _kdb = new Float32Array(7);
+
+  // ==========================================================================
+  // 2. MODULE LOADER — provided ./math files first; kernel fills failures.
+  // ==========================================================================
+  const M = { vec2: null, vec3: null, vec4: null, mat2: null, mat3: null, mat4: null, quat: null };
+  const MOD_STATUS = [];
+  const MOD_FILES = [
+    ["vec2", "./math/002_vec2.js"], ["vec3", "./math/003_vec3.js"], ["vec4", "./math/004_vec4.js"],
+    ["mat2", "./math/005_mat2.js"], ["mat3", "./math/006_mat3.js"], ["mat4", "./math/007_mat4.js"], ["quat", "./math/008_quat.js"]
+  ];
+  async function loadMath() {
+    await Promise.all(MOD_FILES.map(async ([key, url]) => {
+      let live = null, err = null;
+      try { live = await import(url); } catch (e) { err = e; }
+      const merged = Object.assign({}, K[key]);
+      if (live) { const src = (typeof live.create === "function") ? live : (live.default || live);
+        for (const k of Object.keys(src)) if (typeof src[k] === "function") merged[k] = src[k]; }
+      M[key] = merged;
+      MOD_STATUS.push({ key, url, live: !!live, err: err ? errText(err).slice(0, 120) : null });
+    }));
+    MOD_STATUS.sort((a, b) => a.url.localeCompare(b.url));
+    const box = $("modStatus"); box.innerHTML = "";
+    for (const m of MOD_STATUS) {
+      const c = document.createElement("span");
+      c.className = "mchip " + (m.live ? "live" : "kernel");
+      c.innerHTML = "<i></i>" + m.url.match(/(\d{3})/)[1];
+      c.title = m.url + " — " + (m.live ? "LIVE" : "KERNEL fallback") + (m.err ? "\n" + m.err : "");
+      box.appendChild(c);
+    }
+  }
+  let THREE = null;
+  async function loadThree() {
+    let last = null;
+    for (const u of THREE_URLS) { try { return await import(u); } catch (e) { last = e; } }
+    throw new Error("Three.js r185 unreachable on all CDNs. " + errText(last));
+  }
+
+  // ==========================================================================
+  // 3. ZERO-GC SCRATCH + MATH WRAPPERS (module-first, kernel-safe)
+  // ==========================================================================
+  const _m3 = new Float32Array(9), _m3a = new Float32Array(9), _m3b = new Float32Array(9), _m3c = new Float32Array(9);
+  const _m4 = new Float32Array(16), _view = new Float32Array(16), _proj = new Float32Array(16);
+  const _camW = new Float32Array(16), _projI = new Float32Array(16);
+  const _v3 = new Float32Array(3), _v3b = new Float32Array(3), _v3c = new Float32Array(3);
+  const _f = new Float32Array(3), _u = new Float32Array(3), _r = new Float32Array(3);
+  const _n = new Float32Array(3), _t = new Float32Array(3), _b = new Float32Array(3);
+  const _ax = new Float32Array(3), _p = new Float32Array(3), _col = new Float32Array(3);
+  const _v4 = new Float32Array(4), _v4b = new Float32Array(4), _lp = new Float32Array(4);
+  const _q = new Float32Array(4), _qa = new Float32Array(4), _qb = new Float32Array(4);
+  const _dec = new Float32Array(7), _sc = new Float32Array(3);
+  const _m2 = new Float32Array(4), _m2b = new Float32Array(4), _m2c = new Float32Array(4);
+  const _eye = new Float32Array(3), _up = new Float32Array([0, 1, 0]);
+  const _ctr = new Float32Array([0, CENTER_Y, 0]);
+  const _id16 = new Float32Array(16); _id16[0] = _id16[5] = _id16[10] = _id16[15] = 1;
+  const _id9 = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+
+  const v3set = (o, x, y, z) => M.vec3.set(o, x, y, z);
+  const v3add = (o, a, b) => M.vec3.add(o, a, b);
+  const v3sub = (o, a, b) => M.vec3.subtract(o, a, b);
+  const v3scale = (o, a, s) => M.vec3.scale(o, a, s);
+  const v3sad = (o, a, b, s) => M.vec3.scaleAndAdd(o, a, b, s);
+  const v3norm = (o, a) => M.vec3.normalize(o, a);
+  const v3len = (a) => M.vec3.length(a);
+  const v3dot = (a, b) => M.vec3.dot(a, b);
+  const v3cross = (o, a, b) => M.vec3.cross(o, a, b);
+  const v3tm3 = (o, a, m) => M.vec3.transformMat3(o, a, m);
+  const v4set = (o, x, y, z, w) => M.vec4.set(o, x, y, z, w);
+  const v4tm4 = (o, a, m) => M.vec4.transformMat4(o, a, m);
+  const m3id = (o) => M.mat3.identity(o);
+  const m3copy = (o, a) => M.mat3.copy(o, a);
+  const m3set = (o, a, b, c, d, e, f, g, h, i) => M.mat3.set(o, a, b, c, d, e, f, g, h, i);
+  const m3mul = (o, a, b) => M.mat3.multiply(o, a, b);
+  const m3ms = (o, a, s) => M.mat3.multiplyScalar(o, a, s);
+  const m3add = (o, a, b) => M.mat3.add(o, a, b);
+  const m3quat = (o, q) => M.mat3.fromQuat(o, q);
+  const m4m3t = (o, m, v) => M.mat4.fromMat3Translation(o, m, v);
+  const m4look = (o, e, c, u) => M.mat4.lookAt(o, e, c, u);
+  const m4persp = (o, f, a, n, fa) => (M.mat4.perspectiveNO || M.mat4.perspective)(o, f, a, n, fa);
+  const m4inv = (o, a) => M.mat4.invert(o, a);
+  function qAxis(o, x, y, z, rad) { v3set(_ax, x, y, z); v3norm(_ax, _ax); return M.quat.setAxisAngle(o, _ax, rad); }
+  function m3axis(o, x, y, z, rad) { qAxis(_q, x, y, z, rad); return m3quat(o, _q); }
+  function m3uni(o, s) { return m3set(o, s, 0, 0, 0, s, 0, 0, 0, s); }
+  function m3scaleCols(o, sx, sy, sz) { o[0] *= sx; o[1] *= sx; o[2] *= sx; o[3] *= sy; o[4] *= sy; o[5] *= sy; o[6] *= sz; o[7] *= sz; o[8] *= sz; return o; }
+  function m3orient(o, dx, dy, dz) { // columns = right, up, forward (+Z aims at target)
+    v3set(_f, dx, dy, dz); v3norm(_f, _f);
+    v3cross(_r, _up, _f);
+    if (v3len(_r) < 1e-6) { v3set(_r, 1, 0, 0); if (Math.abs(_f[0]) > .9) v3set(_r, 0, 1, 0); } else v3norm(_r, _r);
+    v3cross(_u, _f, _r); v3norm(_u, _u);
+    return m3set(o, _r[0], _r[1], _r[2], _u[0], _u[1], _u[2], _f[0], _f[1], _f[2]);
+  }
+  function m3tbn(o, nx, ny, nz, tx, ty, tz, hand) {
+    v3set(_n, nx, ny, nz); v3norm(_n, _n); v3set(_t, tx, ty, tz);
+    const d = v3dot(_t, _n); v3sad(_t, _t, _n, -d);
+    if (v3len(_t) < 1e-6) { v3set(_t, 0, -_n[2], _n[1]); if (Math.abs(_n[0]) > .9) v3set(_t, 1, 0, 0); }
+    v3norm(_t, _t); v3cross(_b, _n, _t);
+    if (hand < 0) { _b[0] = -_b[0]; _b[1] = -_b[1]; _b[2] = -_b[2]; }
+    return m3set(o, _t[0], _t[1], _t[2], _b[0], _b[1], _b[2], _n[0], _n[1], _n[2]);
+  }
+  const m3inc = (o, i, O) => M.mat3.fromInclination(o, i, O);
+  const m3orb = (o, i, O, w) => M.mat3.fromOrbitalFrame(o, i, O, w);
+  const m3gray = (o) => M.mat3.fromGrayscale(o);
+  const m3sat = (o, s) => M.mat3.fromSaturation(o, s);
+  const m3hue = (o, r) => M.mat3.fromHueRotation(o, r);
+  const m3mix = (o, a, b, c, d, e, f, g, h, i) => M.mat3.fromChannelMix(o, a, b, c, d, e, f, g, h, i);
+  const m3decomp = (o, m) => M.mat3.decompose(o, m);
+  const m3comp = (o, sx, sy, sz, x, y, z, w) => M.mat3.compose(o, sx, sy, sz, x, y, z, w);
+  const m3blend = (o, a, b, t) => M.mat3.blendRotation(o, a, b, t);
+  const qSlerp = (o, a, b, t) => M.quat.slerp(o, a, b, t);
+  const qEuler = (o, x, y, z) => M.quat.fromEuler(o, x, y, z, "zyx");
+  const spring3 = (o, c, t, v, st, dt) => M.vec3.springDamp3(o, c, t, v, st, dt, Infinity);
+  const fabrik = (p, l, t, tol) => M.vec3.fabrikStep3(p, l, t, tol);
+  const kepler = (o, a, e, Mm, i, O, w) => M.vec3.keplerOrbit3D(o, a, e, Mm, i, O, w);
+  const m2rot = (o, r) => M.mat2.fromRotation(o, r);
+  const m2shear = (o, kx, ky) => M.mat2.fromShear(o, kx, ky);
+  const m2mul = (o, a, b) => M.mat2.multiply(o, a, b);
+  const v2dist = (a, b) => M.vec2.distance(a, b);
+
+  // ==========================================================================
+  // 4. PALETTES
+  // ==========================================================================
+  const PALETTES = {
+    nebula: { bg: 0x0a0618, fog: 0x0d0722, key: 0xffe9f4, rim: 0x22d3ee, fill: 0x6d28d9, star: 0xcabffd,
+      accents: [0x7c3aed, 0x22d3ee, 0xff2ea6, 0xa3e635, 0xffb020, 0x60a5fa],
+      css: ["#7c3aed", "#22d3ee", "#ff2ea6", "#a3e635", "#ffb020", "#070312", "#0d0722", "#140b30", "#2a1b55", "#efeaff", "#9d92c9"] },
+    ember: { bg: 0x14060a, fog: 0x1a080c, key: 0xffd9b0, rim: 0xff2ea6, fill: 0xff4d2e, star: 0xffd1a6,
+      accents: [0xff4d2e, 0xffb020, 0xff2ea6, 0xffd166, 0xf97316, 0xfb7185],
+      css: ["#f97316", "#ffb020", "#ff2ea6", "#ffd166", "#ff4d2e", "#0d0406", "#160709", "#220b0e", "#4a1b22", "#fff1e8", "#c9958f"] },
+    aurora: { bg: 0x041014, fog: 0x06161c, key: 0xd8fff4, rim: 0x60a5fa, fill: 0x2dd4bf, star: 0xa6f4e8,
+      accents: [0x2dd4bf, 0x34d399, 0xa3e635, 0x60a5fa, 0xf0abfc, 0x22d3ee],
+      css: ["#14b8a6", "#34d399", "#60a5fa", "#a3e635", "#f0abfc", "#030b0e", "#061418", "#0a2027", "#16404a", "#e8fff8", "#8fc9bd"] }
+  };
+  const hexRGB = (h) => [(h >> 16 & 255) / 255, (h >> 8 & 255) / 255, (h & 255) / 255];
+  function applyCssPalette(p) {
+    const c = PALETTES[p].css, r = document.documentElement.style;
+    ["--dom", "--a1", "--a2", "--a3", "--a4", "--bg0", "--bg1", "--surf", "--line", "--ink", "--mut"]
+      .forEach((v, i) => r.setProperty(v, c[i]));
+  }
+
+  // ==========================================================================
+  // 5. ENGINE — one renderer, one scene, center-locked orbit, one render rAF.
+  // ==========================================================================
+  let renderer = null, scene = null, camera = null, pmrem = null, envRT = null;
+  let keyLight = null, rimLight = null, hemi = null, ground = null, grid = null, stars = null, boxGeo = null;
+  let engineActive = false, renderRaf = 0, monitorRaf = 0, lastT = 0, simT = 0, phase = 0;
+  let gpuBytes = 0, liveCubes = 0, liveCalls = 0, disposed = false, ro = null;
+  const cam = { theta: .7, phi: 1.05, dist: 34, tTheta: .7, tPhi: 1.05, tDist: 34, dragging: false };
+  const pointers = new Map(); let pinchD = 0;
+  const stations = []; let seedToken = 0;
+
+  function initEngine() {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance", alpha: false, stencil: false });
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, S.quality));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.12;
+    scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(PALETTES[S.palette].fog, 0.016);
+    camera = new THREE.PerspectiveCamera(55, 1, .1, 400);
+    camera.matrixAutoUpdate = false; camera.matrixWorldAutoUpdate = false;
+    pmrem = new THREE.PMREMGenerator(renderer);
+    boxGeo = new THREE.BoxGeometry(1, 1, 1);
+    keyLight = new THREE.DirectionalLight(0xffffff, 2.6);
+    rimLight = new THREE.DirectionalLight(0xffffff, 1.6);
+    hemi = new THREE.HemisphereLight(0xffffff, 0x000000, .5);
+    for (const L of [keyLight, rimLight]) { L.matrixAutoUpdate = false; L.target.matrixAutoUpdate = false; scene.add(L, L.target); }
+    scene.add(hemi);
+    v3set(_v3, 42, 34, 30); keyLight.position.fromArray(_v3); m4m3t(_m4, _id9, _v3); keyLight.matrix.fromArray(_m4); keyLight.matrixWorldNeedsUpdate = true;
+    v3set(_v3, -36, 20, -38); rimLight.position.fromArray(_v3); m4m3t(_m4, _id9, _v3); rimLight.matrix.fromArray(_m4); rimLight.matrixWorldNeedsUpdate = true;
+    buildGround(); buildGrid(); buildStars();
+    applyEnginePalette();
+    resize();
+    ro = new ResizeObserver(resize); ro.observe(document.documentElement);
+    canvas.addEventListener("webglcontextlost", onCtxLost, false);
+    canvas.addEventListener("webglcontextrestored", onCtxRestored, false);
+    bindOrbitInput();
+  }
+  function bakeEnvironment(pal) {
+    const env = new THREE.Scene(); const geo = new THREE.PlaneGeometry(10, 10);
+    for (let i = 0; i < 6; i++) {
+      const rgb = hexRGB(pal.accents[i]); const mat = new THREE.MeshBasicMaterial();
+      mat.color.setRGB(rgb[0] * 2.2, rgb[1] * 2.2, rgb[2] * 2.2); mat.side = THREE.DoubleSide;
+      const m = new THREE.Mesh(geo, mat); m.matrixAutoUpdate = false;
+      const a = i / 6 * TAU; v3set(_v3, Math.cos(a) * 12, i % 2 ? 8 : -4, Math.sin(a) * 12);
+      m3axis(_m3, 0, 1, 0, a + Math.PI); m4m3t(_m4, _m3, _v3);
+      m.matrix.fromArray(_m4); m.matrixWorldNeedsUpdate = true; env.add(m);
+    }
+    const rt = pmrem.fromScene(env, .08);
+    if (envRT) envRT.dispose(); envRT = rt; scene.environment = rt.texture;
+    env.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+  }
+  function buildGround() {
+    const c = document.createElement("canvas"); c.width = c.height = 256;
+    const g = c.getContext("2d"), gr = g.createRadialGradient(128, 128, 8, 128, 128, 128);
+    gr.addColorStop(0, "#241a45"); gr.addColorStop(.5, "#120b28"); gr.addColorStop(1, "#05030c");
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    g.strokeStyle = "rgba(140,120,255,.14)";
+    for (let r = 24; r < 128; r += 24) { g.beginPath(); g.arc(128, 128, r, 0, TAU); g.stroke(); }
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    ground = new THREE.Mesh(new THREE.CircleGeometry(46, 64), new THREE.MeshStandardMaterial({ map: tex, roughness: .92, metalness: .05 }));
+    ground.matrixAutoUpdate = false; ground.frustumCulled = false;
+    v3set(_v3, 0, -.55, 0); m3axis(_m3, 1, 0, 0, -Math.PI / 2); m4m3t(_m4, _m3, _v3);
+    ground.matrix.fromArray(_m4); ground.matrixWorldNeedsUpdate = true; scene.add(ground);
+  }
+  function buildGrid() {
+    const pts = [];
+    for (let i = -12; i <= 12; i++) { const v = i * 3.6; pts.push(v, -.5, -44, v, -.5, 44, -44, -.5, v, 44, -.5, v); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pts), 3));
+    grid = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ transparent: true, opacity: .2 }));
+    grid.matrixAutoUpdate = false; grid.matrix.fromArray(_id16); grid.matrixWorldNeedsUpdate = true;
+    grid.frustumCulled = false; scene.add(grid);
+  }
+  function buildStars() {
+    const N = 1200, pos = new Float32Array(N * 3), rng = mulberry32(777);
+    for (let i = 0; i < N; i++) {
+      const r = 90 + rng() * 120, th = rng() * TAU, ph = Math.acos(2 * rng() - 1);
+      v3set(_v3, r * Math.sin(ph) * Math.cos(th), Math.abs(r * Math.cos(ph)) * .7 - 6, r * Math.sin(ph) * Math.sin(th));
+      pos[i * 3] = _v3[0]; pos[i * 3 + 1] = _v3[1]; pos[i * 3 + 2] = _v3[2];
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    stars = new THREE.Points(geo, new THREE.PointsMaterial({ size: .5, sizeAttenuation: true, transparent: true, opacity: .6, depthWrite: false, blending: THREE.AdditiveBlending }));
+    stars.matrixAutoUpdate = false; stars.frustumCulled = false;
+    stars.matrix.fromArray(_id16); stars.matrixWorldNeedsUpdate = true; scene.add(stars);
+    gpuBytes += pos.byteLength;
+  }
+  function applyEnginePalette() {
+    const pal = PALETTES[S.palette];
+    applyCssPalette(S.palette);
+    bakeEnvironment(pal);
+    scene.fog.color.setRGB(...hexRGB(pal.fog));
+    keyLight.color.setRGB(...hexRGB(pal.key)); rimLight.color.setRGB(...hexRGB(pal.rim));
+    const f = hexRGB(pal.fill); hemi.color.setRGB(f[0] * .9 + .1, f[1] * .9 + .1, f[2] * .9 + .1);
+    hemi.groundColor.setRGB(...hexRGB(pal.bg));
+    grid.material.color.setRGB(...hexRGB(pal.accents[0]));
+    stars.material.color.setRGB(...hexRGB(pal.star));
+    for (const st of stations) {
+      const a = hexRGB(pal.accents[st.i % 6]); st.tint = a;
+      st.mesh.material.color.setRGB(a[0] * .85 + .1, a[1] * .85 + .1, a[2] * .85 + .1);
+      st.mesh.material.emissive.setRGB(a[0], a[1], a[2]);
+      if (st.def.colorBase) fillBaseColors(st);
+    }
+  }
+  function resize() {
+    if (!renderer || disposed) return;
+    renderer.setSize(Math.max(2, innerWidth), Math.max(2, innerHeight), false);
+  }
+  function onCtxLost(e) { e.preventDefault(); cancelAnimationFrame(renderRaf); renderRaf = 0; toast("WebGL context lost — waiting for restore…"); }
+  function onCtxRestored() { resize(); lastT = performance.now(); if (engineActive && !renderRaf) renderRaf = requestAnimationFrame(renderLoop); toast("WebGL context restored"); }
+
+  // ---------- center-locked orbit input ----------
+  function bindOrbitInput() {
+    canvas.addEventListener("pointerdown", (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pointers.size === 1) { cam.dragging = true; canvas.classList.add("drag"); }
+      if (pointers.size === 2) { const it = [...pointers.values()]; pinchD = v2dist(it[0], it[1]); }
+      ensureAudio();
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      const p = pointers.get(e.pointerId); if (!p) return;
+      const dx = e.clientX - p[0], dy = e.clientY - p[1]; p[0] = e.clientX; p[1] = e.clientY;
+      if (pointers.size === 1) {
+        cam.tTheta -= dx * .0052; cam.tPhi = Math.max(.18, Math.min(1.5, cam.tPhi - dy * .0038));
+      } else if (pointers.size === 2) {
+        const it = [...pointers.values()], d = v2dist(it[0], it[1]);
+        if (pinchD > 0) cam.tDist *= pinchD / Math.max(1, d);
+        pinchD = d;
+      }
+    });
+    const up = (e) => { pointers.delete(e.pointerId); if (!pointers.size) { cam.dragging = false; canvas.classList.remove("drag"); } };
+    canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
+    canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.tDist *= Math.exp(e.deltaY * .0011); }, { passive: false });
+  }
+  function updateCamera(dt) {
+    if (S.autoOrbit && !cam.dragging) cam.tTheta += .06 * dt;
+    const k = 1 - Math.exp(-dt * 7);
+    cam.theta += (cam.tTheta - cam.theta) * k;
+    cam.phi += (cam.tPhi - cam.phi) * k;
+    cam.dist += (cam.tDist - cam.dist) * k;
+    cam.dist = Math.max(7, Math.min(120, cam.dist));
+    const sp = Math.sin(cam.phi), cp = Math.cos(cam.phi);
+    v3set(_v3, Math.cos(cam.theta) * sp, cp, Math.sin(cam.theta) * sp);
+    v3sad(_eye, _ctr, _v3, cam.dist);              // pivot = exact scene center
+    m4look(_view, _eye, _ctr, _up);
+    m4persp(_proj, 55 * Math.PI / 180, Math.max(.2, innerWidth / Math.max(1, innerHeight)), .1, 400);
+    m4inv(_camW, _view); m4inv(_projI, _proj);
+    camera.matrix.fromArray(_camW); camera.matrixWorld.fromArray(_camW);
+    camera.matrixWorldInverse.fromArray(_view);
+    camera.projectionMatrix.fromArray(_proj); camera.projectionMatrixInverse.fromArray(_projI);
+    camera.matrixWorldNeedsUpdate = false;
+  }
+
+  // ==========================================================================
+  // 6. STATIONS — 5 InstancedMeshes, SoA positions, chunked seeding.
+  // ==========================================================================
+  function makeStationMesh(i) {
+    const a = hexRGB(PALETTES[S.palette].accents[i % 6]);
+    const mat = new THREE.MeshPhysicalMaterial({});
+    mat.color.setRGB(a[0] * .85 + .1, a[1] * .85 + .1, a[2] * .85 + .1);
+    mat.emissive.setRGB(a[0], a[1], a[2]);
+    mat.roughness = .24; mat.metalness = .55; mat.clearcoat = .6; mat.clearcoatRoughness = .14;
+    mat.emissiveIntensity = S.glow; mat.wireframe = S.wireframe; mat.dithering = true;
+    const mesh = new THREE.InstancedMesh(boxGeo, mat, CAP);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
+    mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    mesh.count = 0; mesh.matrixAutoUpdate = false; mesh.matrix.fromArray(_id16);
+    mesh.matrixWorldNeedsUpdate = true; mesh.frustumCulled = false;
+    scene.add(mesh);
+    gpuBytes += CAP * 76;
+    return { mesh, matArr: mesh.instanceMatrix.array, colArr: mesh.instanceColor.array, tint: a };
+  }
+  function pack(st, i, m3, x, y, z) {
+    v3set(_p, x, y, z); v3add(_p, _p, st.center);
+    m4m3t(_m4, m3, _p); st.matArr.set(_m4, i * 16);
+  }
+  function tint(st, i, r, g, b) { const o = i * 3; st.colArr[o] = r; st.colArr[o + 1] = g; st.colArr[o + 2] = b; st.colDirty = true; }
+  function tintHex(st, i, hex) { const c = hexRGB(hex); tint(st, i, c[0], c[1], c[2]); }
+  function flush(st) {
+    st.mesh.instanceMatrix.needsUpdate = true;
+    if (st.colDirty) { st.mesh.instanceColor.needsUpdate = true; st.colDirty = false; }
+  }
+  function fillBaseColors(st) {
+    const pal = PALETTES[S.palette];
+    for (let i = 0; i < CAP; i++) { const c = hexRGB(pal.accents[i % 6]); st.baseR[i] = c[0]; st.baseG[i] = c[1]; st.baseB[i] = c[2]; }
+  }
+  async function seedStation(st, token) {
+    const rng = mulberry32((S.seed * 2654435761 ^ (st.globalIndex * 97 + 13)) >>> 0);
+    st.rng = rng; st.ready = false;
+    const alive = () => token === seedToken;
+    const d = st.def;
+    if (d.grid) {
+      const g = Math.ceil(Math.sqrt(CAP)), half = (g - 1) * d.grid * .5;
+      await chunked(CAP, (i) => { st.px[i] = (i % g) * d.grid - half; st.py[i] = d.gy || 0; st.pz[i] = ((i / g) | 0) * d.grid - half; }, alive);
+    } else if (d.scatter) {
+      await chunked(CAP, (i) => {
+        const th = rng() * TAU, ph = Math.acos(2 * rng() - 1), rr = d.scatter * Math.cbrt(rng());
+        st.px[i] = rr * Math.sin(ph) * Math.cos(th); st.py[i] = rr * Math.cos(ph) + 2.6; st.pz[i] = rr * Math.sin(ph) * Math.sin(th);
+      }, alive);
+    }
+    if (d.seed) await d.seed(st, rng, alive);
+    if (alive()) st.ready = true;
+  }
+  function disposeStations() {
+    seedToken++;
+    for (const st of stations) { scene.remove(st.mesh); st.mesh.material.dispose(); st.mesh.dispose(); gpuBytes -= CAP * 76; }
+    stations.length = 0; chipsEl.innerHTML = ""; infoEl.innerHTML = "";
+  }
+  async function buildPart(n) {
+    disposeStations();
+    const defs = n === 0 ? [ATTRACT] : STAGE_DEFS.slice((n - 1) * 5, n * 5);
+    const token = ++seedToken;
+    const count = defs.length;
+    for (let i = 0; i < count; i++) {
+      const base = makeStationMesh(i);
+      const ang = count === 1 ? 0 : i / count * TAU;
+      const center = new Float32Array(3);
+      v3set(center, count === 1 ? 0 : Math.cos(ang) * RING_R, 0, count === 1 ? 0 : Math.sin(ang) * RING_R);
+      const def = defs[i];
+      const st = Object.assign(base, {
+        i, globalIndex: n === 0 ? 0 : (n - 1) * 5 + i, def, center,
+        px: new Float32Array(CAP), py: new Float32Array(CAP), pz: new Float32Array(CAP),
+        colDirty: false, ready: false, rng: null
+      });
+      if (def.colorBase) { st.baseR = new Float32Array(CAP); st.baseG = new Float32Array(CAP); st.baseB = new Float32Array(CAP); fillBaseColors(st); }
+      if (def.alloc) def.alloc(st);
+      stations.push(st);
+      if (n !== 0) {
+        const num = String(st.globalIndex + 1).padStart(2, "0");
+        const chip = document.createElement("button");
+        chip.className = "schip"; chip.innerHTML = `<span class="n">${num}</span>${def.name}`;
+        chip.addEventListener("click", () => selectStage(i));
+        chipsEl.appendChild(chip);
+      }
+    }
+    for (const st of stations) await seedStation(st, token);
+    if (n !== 0) selectStage(0); else { S.selected = -1; infoEl.innerHTML = `<b>Attract</b> — drag to orbit the scene center · open ☰ Parts to load a demo part`; }
+    updateGpuHud();
+  }
+  function selectStage(i) {
+    S.selected = i;
+    [...chipsEl.children].forEach((c, k) => c.classList.toggle("act", k === i));
+    const st = stations[i]; if (!st) return;
+    infoEl.innerHTML = `<b>${String(st.globalIndex + 1).padStart(2, "0")} · ${st.def.name}</b> — ${st.def.desc} <code>${st.def.formula}</code> <span class="ro" id="roLine"></span>`;
+    tick();
+  }
+
+  // ==========================================================================
+  // 7. THE 20 STAGES — faithful ports of part1–part4 DEFS (seamless loops).
+  // ==========================================================================
+  const ATTRACT = {
+    name: "Attract", desc: "", formula: "", scatter: 5.4,
+    seed: async (st, rng, alive) => {
+      st.spin = new Float32Array(CAP);
+      await chunked(CAP, (i) => { st.spin[i] = rng() * TAU; }, alive);
+    },
+    frame(st, ph, n) {
+      const golden = Math.PI * (3 - Math.sqrt(5));
+      for (let i = 0; i < n; i++) {
+        const lvl = i / n, r = 1.1 + Math.sqrt(lvl) * 5.2, a = i * golden + TAU * ph;
+        const y = (lvl - .5) * 5 + Math.sin(TAU * ph + st.spin[i]) * .3;
+        m3axis(_m3, 0, 1, 0, a * 2);
+        m3ms(_m3, _m3, S.cubeSize * (.3 + lvl * .3));
+        pack(st, i, _m3, Math.cos(a) * r, y + 2.4, Math.sin(a) * r);
+        const c = hexRGB(PALETTES[S.palette].accents[i % 6]);
+        tint(st, i, c[0], c[1], c[2]);
+      }
+    }
+  };
+  const STAGE_DEFS = [
+    // ---- PART 1 (01–05) ----
+    { name: "Identity Lattice", formula: "M = s·I, s = .62 + .2·sin 2π(φ+u)", desc: "The identity basis breathes; a traveling scale wave wraps perfectly at the loop seam.", grid: .92, gy: 1.4,
+      frame(st, ph, n) { const g = Math.ceil(Math.sqrt(n)), h = (g - 1) * .46;
+        for (let i = 0; i < n; i++) { const ix = i % g, iz = (i / g) | 0, u = (ix + iz) / (2 * g), w = Math.sin(TAU * (ph + u));
+          m3uni(_m3, S.cubeSize * (.62 + .2 * w));
+          pack(st, i, _m3, ix * .92 - h, 1.4 + .5 * w, iz * .92 - h);
+          tint(st, i, st.tint[0] * (.6 + .4 * (w * .5 + .5)), st.tint[1], st.tint[2]); } } },
+    { name: "Axis Spin Trio", formula: "Rₐ(2π·(2φ + i/n))", desc: "Three interleaved rows spin on X, Y and Z — two full turns per loop.", grid: .95, gy: 1.6,
+      frame(st, ph, n) { const g = Math.ceil(Math.sqrt(n)), h = (g - 1) * .475, pal = PALETTES[S.palette].accents;
+        for (let i = 0; i < n; i++) { const ax = i % 3, ang = TAU * (2 * ph + i / n);
+          m3axis(_m3, ax === 0 ? 1 : 0, ax === 1 ? 1 : 0, ax === 2 ? 1 : 0, ang);
+          m3ms(_m3, _m3, .6 * S.cubeSize);
+          pack(st, i, _m3, (i % g) * .95 - h, 1.6, ((i / g) | 0) * .95 - h);
+          tintHex(st, i, pal[ax + 1]); } } },
+    { name: "Noise Orientation Field", formula: "M = R_y(2πφ) · Shoemake(hash⌊p·s⌋)", desc: "Deterministic hashed orientations carried by one seamless global yaw.", scatter: 3.6,
+      alloc(st) { st.baked = new Float32Array(CAP * 9); },
+      seed: async (st, rng, alive) => {
+        await chunked(CAP, (i) => {
+          const gx = Math.floor(st.px[i] * .35), gy = Math.floor(st.py[i] * .35), gz = Math.floor(st.pz[i] * .35);
+          const u1 = hash3(gx, gy, gz), u2 = hash3(gx + 17, gy + 23, gz + 5), u3 = hash3(gx + 3, gy + 11, gz + 29);
+          const s1 = Math.sqrt(1 - u1), s2 = Math.sqrt(u1);
+          _q[0] = s1 * Math.sin(TAU * u2); _q[1] = s1 * Math.cos(TAU * u2); _q[2] = s2 * Math.sin(TAU * u3); _q[3] = s2 * Math.cos(TAU * u3);
+          m3quat(_m3a, _q); st.baked.set(_m3a, i * 9);
+        }, alive);
+      },
+      frame(st, ph, n) { m3axis(_m3c, 0, 1, 0, TAU * ph);
+        for (let i = 0; i < n; i++) { m3copy(_m3a, st.baked.subarray(i * 9, i * 9 + 9));
+          m3mul(_m3, _m3c, _m3a); m3ms(_m3, _m3, .42 * S.cubeSize);
+          pack(st, i, _m3, st.px[i], st.py[i] + .3 * Math.sin(TAU * (ph + i / n)), st.pz[i]);
+          tint(st, i, st.tint[0], st.tint[1], st.tint[2]); } } },
+    { name: "TBN Normal Wall", formula: "T′ = normalize(T−(T·N)N), B = N×T", desc: "Animated normals re-orthogonalize tangents every frame — the exact normal-mapping basis.", grid: .8, gy: 2.2,
+      alloc(st) { st.tx = new Float32Array(CAP); st.ty = new Float32Array(CAP); st.tz = new Float32Array(CAP); },
+      seed: async (st, rng, alive) => { await chunked(CAP, (i) => { v3set(_v3, 1, rng() * .4 - .2, rng() * .4 - .2); v3norm(_v3, _v3); st.tx[i] = _v3[0]; st.ty[i] = _v3[1]; st.tz[i] = _v3[2]; }, alive); },
+      frame(st, ph, n) { const g = Math.ceil(Math.sqrt(n)), h = (g - 1) * .4;
+        for (let i = 0; i < n; i++) { const u = (i % g) / g, v = ((i / g) | 0) / g;
+          const nx = .8 * Math.sin(TAU * ph + u * Math.PI), ny = .8 * Math.cos(TAU * ph + v * Math.PI), nz = .6 * Math.sin(TAU * 2 * ph + (u + v) * Math.PI);
+          m3tbn(_m3, nx, ny, nz, st.tx[i], st.ty[i], st.tz[i], i % 2 ? 1 : -1);
+          m3ms(_m3, _m3, .5 * S.cubeSize);
+          pack(st, i, _m3, (i % g) * .8 - h, 2.2, ((i / g) | 0) * .8 - h);
+          const l = Math.hypot(nx, ny, nz) || 1;
+          tint(st, i, nx / l * .5 + .5, ny / l * .5 + .5, nz / l * .5 + .5); } } },
+    { name: "Quaternion Bridge", formula: "Q = slerp(Qₐ,Q_b, ½−½cos 2πφ)", desc: "Seeded Euler keyframes cross the slerp bridge and return — quat→mat3 live.", grid: .9, gy: 1.8,
+      alloc(st) { st.qa = new Float32Array(CAP * 4); st.qb = new Float32Array(CAP * 4); },
+      seed: async (st, rng, alive) => { await chunked(CAP, (i) => { qEuler(_q, rng() * 360, rng() * 360, rng() * 360); st.qa.set(_q, i * 4); qEuler(_q, rng() * 360, rng() * 360, rng() * 360); st.qb.set(_q, i * 4); }, alive); },
+      frame(st, ph, n) { const t = pingpong(ph), g = Math.ceil(Math.sqrt(n)), h = (g - 1) * .45;
+        for (let i = 0; i < n; i++) {
+          _qa.set(st.qa.subarray(i * 4, i * 4 + 4)); _qb.set(st.qb.subarray(i * 4, i * 4 + 4));
+          qSlerp(_q, _qa, _qb, t); m3quat(_m3, _q); m3ms(_m3, _m3, .55 * S.cubeSize);
+          pack(st, i, _m3, (i % g) * .9 - h, 1.8, ((i / g) | 0) * .9 - h);
+          tint(st, i, st.tint[0] * (1 - t) + .2 * t, st.tint[1], st.tint[2] * (1 - t) + .9 * t); } } },
+    // ---- PART 2 (06–10) ----
+    { name: "Matrix Slerp Duel", formula: "M = blendRotation(A(φ),B(φ),tᵢ)", desc: "Two animated TRS matrices blended in matrix space — shortest-arc rotation, linear scale.", grid: .85, gy: 2,
+      seed: async (st, rng, alive) => { st.ph0 = new Float32Array(CAP); await chunked(CAP, (i) => { st.ph0[i] = rng() * TAU; }, alive); },
+      frame(st, ph, n) {
+        m3axis(_m3a, 0, 1, 0, TAU * ph); m3scaleCols(_m3a, 1.3, .7, 1.3);
+        m3axis(_m3b, 1, 0, 0, TAU * 2 * ph); m3scaleCols(_m3b, .7, 1.3, .7);
+        const g = Math.ceil(Math.sqrt(n)), h = (g - 1) * .425;
+        for (let i = 0; i < n; i++) { const t = .5 - .5 * Math.cos(TAU * ph + st.ph0[i]);
+          m3blend(_m3, _m3a, _m3b, t); m3ms(_m3, _m3, .5 * S.cubeSize);
+          pack(st, i, _m3, (i % g) * .85 - h, 2, ((i / g) | 0) * .85 - h);
+          tint(st, i, .3 + .7 * t, st.tint[1], 1 - .6 * t); } } },
+    { name: "Decompose ⇄ Compose", formula: "M → [s,q] → M′, ‖M−M′‖ = 0", desc: "Left half renders the source matrix, right half its round-trip — pixel-identical proof.", grid: .9, gy: 1.7,
+      frame(st, ph, n) {
+        m3axis(_m3a, 0, 1, 0, TAU * ph);
+        m3scaleCols(_m3a, 1 + .45 * Math.sin(TAU * ph), 1 + .45 * Math.cos(TAU * 2 * ph), 1 + .45 * Math.sin(TAU * ph + 2));
+        m3decomp(_dec, _m3a); m3comp(_m3b, _dec[0], _dec[1], _dec[2], _dec[3], _dec[4], _dec[5], _dec[6]);
+        const g = Math.ceil(Math.sqrt(n)), h = (g - 1) * .45;
+        for (let i = 0; i < n; i++) { const right = (i % g) >= g / 2;
+          m3copy(_m3, right ? _m3b : _m3a); m3ms(_m3, _m3, .52 * S.cubeSize);
+          pack(st, i, _m3, (i % g) * .9 - h, 1.7, ((i / g) | 0) * .9 - h);
+          if (right) tint(st, i, .25, .95, .55); else tint(st, i, st.tint[0], st.tint[1], st.tint[2]); } },
+      readout: () => `s=(${_dec[0].toFixed(2)},${_dec[1].toFixed(2)},${_dec[2].toFixed(2)}) qw=${_dec[6].toFixed(3)}` },
+    { name: "Shear Wave", formula: "x′ = x + k·y, k = .8·sin 2π(φ+u)", desc: "Pure XY shear sweeps the stack — cubes lean, det M = 1 keeps volume exact.", grid: .9, gy: 0,
+      frame(st, ph, n) { const g = Math.ceil(Math.sqrt(n)), h = (g - 1) * .45;
+        for (let i = 0; i < n; i++) { const ix = i % g, iz = (i / g) | 0, u = (ix + iz) / (2 * g), k = .8 * Math.sin(TAU * (ph + u));
+          m3set(_m3, 1, 0, 0, k, 1, 0, 0, 0, 1); m3ms(_m3, _m3, .55 * S.cubeSize);
+          pack(st, i, _m3, ix * .9 - h, 1.2 + iz * .12, iz * .9 - h);
+          tint(st, i, st.tint[0] + .3 * Math.abs(k), st.tint[1], st.tint[2]); } } },
+    { name: "Kepler Ring System", formula: "R = Rz(Ω)Rx(i)Rz(ω), M = 2π·k·φ", desc: "Five inclined Newton–Raphson Kepler orbits; mean anomaly wraps 2π seamlessly.",
+      alloc(st) { st.el = { a: new Float32Array(CAP), e: new Float32Array(CAP), inc: new Float32Array(CAP), Om: new Float32Array(CAP), om: new Float32Array(CAP), k: new Uint8Array(CAP) }; },
+      seed: async (st, rng, alive) => { await chunked(CAP, (i) => { const r = i % 5, e = st.el;
+        e.a[i] = 1.7 + r * .75; e.e[i] = .08 + rng() * .22; e.inc[i] = (rng() - .5) * .9; e.Om[i] = rng() * TAU; e.om[i] = rng() * TAU; e.k[i] = 1 + r % 3; }, alive); },
+      frame(st, ph, n) { const e = st.el, pal = PALETTES[S.palette].accents;
+        for (let i = 0; i < n; i++) { let Mm = (TAU * ph * e.k[i] + i * 2.399963) % TAU;
+          kepler(_v3, e.a[i], e.e[i], Mm, e.inc[i], e.Om[i], e.om[i]);
+          m3orb(_m3, e.inc[i], e.Om[i], e.om[i]); m3axis(_m3b, 0, 0, 1, TAU * 2 * ph);
+          m3mul(_m3, _m3, _m3b); m3ms(_m3, _m3, .24 * S.cubeSize);
+          pack(st, i, _m3, _v3[0], _v3[1] + 2.6, _v3[2]); tintHex(st, i, pal[i % 5]); }
+        if (n) { m3uni(_m3, .5 * S.cubeSize * (1 + .12 * Math.sin(TAU * 2 * ph))); pack(st, 0, _m3, 0, 2.6, 0); tint(st, 0, 1.6, 1.3, .8); } },
+      readout: (st, ph) => `M₀ = ${((TAU * ph * st.el.k[0]) % TAU * 57.2958).toFixed(1)}° · e₀=${st.el.e[0].toFixed(2)}` },
+    { name: "Inclination Gyro", formula: "R = Rz(Ω)Rx(i), i = i₀ + ½sin 2πφ", desc: "Three nested gimbal rings counter-rotate at integer rates — a seamless gyroscope.",
+      frame(st, ph, n) { const pal = PALETTES[S.palette].accents;
+        for (let r = 0; r < 3; r++) {
+          const inc = .5 + r * .45 + .5 * Math.sin(TAU * ph + r * 2.1), Om = TAU * ph * (r + 1) * (r % 2 ? -1 : 1);
+          m3inc(_m3c, inc, Om);
+          for (let i = r; i < n; i += 3) { const u = ((i / 3) | 0) / Math.max(1, n / 3), a = TAU * u, rad = 1.5 + r * .85;
+            v3set(_v3, Math.cos(a) * rad, 0, Math.sin(a) * rad); v3tm3(_v3b, _v3, _m3c);
+            m3orient(_m3, _v3b[0], _v3b[1], _v3b[2]); m3ms(_m3, _m3, .26 * S.cubeSize);
+            pack(st, i, _m3, _v3b[0], _v3b[1] + 2.7, _v3b[2]); tintHex(st, i, pal[r + 1]); } } } },
+    // ---- PART 3 (11–15) ----
+    { name: "Hue Carousel", formula: "C′ = H(2πφ)·C (YIQ)", desc: "One 3×3 hue matrix grades every instance color; a full 2π turn lands back exactly.", scatter: 3.4, colorBase: true,
+      frame(st, ph, n) { m3hue(_m3c, TAU * ph); m3axis(_m3b, 0, 1, 0, TAU * ph);
+        for (let i = 0; i < n; i++) { m3copy(_m3, _m3b); m3ms(_m3, _m3, .34 * S.cubeSize);
+          pack(st, i, _m3, st.px[i], st.py[i], st.pz[i]);
+          v3set(_col, st.baseR[i], st.baseG[i], st.baseB[i]); v3tm3(_v3b, _col, _m3c);
+          tint(st, i, Math.max(0, _v3b[0]), Math.max(0, _v3b[1]), Math.max(0, _v3b[2])); } },
+      readout: (st, ph) => `hue = ${(ph * 360).toFixed(1)}°` },
+    { name: "Saturation Pulse", formula: "S(s) = s·I + (1−s)·luma⊗1", desc: "Rec.709 luma blends against identity — the field drains to gray and floods back once per loop.", grid: .88, gy: 1.5, colorBase: true,
+      frame(st, ph, n) { const s = .5 + .5 * Math.sin(TAU * ph); m3sat(_m3c, s); m3axis(_m3b, 0, 1, 0, TAU * ph);
+        const g = Math.ceil(Math.sqrt(n)), h = (g - 1) * .44;
+        for (let i = 0; i < n; i++) { m3copy(_m3, _m3b); m3ms(_m3, _m3, (.4 + .2 * s) * S.cubeSize);
+          pack(st, i, _m3, (i % g) * .88 - h, 1.5 + .3 * Math.sin(TAU * (ph + i / n)), ((i / g) | 0) * .88 - h);
+          v3set(_col, st.baseR[i], st.baseG[i], st.baseB[i]); v3tm3(_v3b, _col, _m3c);
+          tint(st, i, _v3b[0], _v3b[1], _v3b[2]); } },
+      readout: (st, ph) => `s = ${(.5 + .5 * Math.sin(TAU * ph)).toFixed(3)}` },
+    { name: "Luma Crossfade", formula: "M = t·I + (1−t)·G", desc: "Matrix-space interpolation between identity and the grayscale projector — arithmetic on transforms.", scatter: 3.2, colorBase: true,
+      frame(st, ph, n) { const t = pingpong(ph);
+        m3id(_m3a); m3ms(_m3a, _m3a, t); m3gray(_m3b); m3ms(_m3b, _m3b, 1 - t); m3add(_m3c, _m3a, _m3b);
+        m3axis(_m3b, 0, 1, 0, TAU * ph);
+        for (let i = 0; i < n; i++) { m3copy(_m3, _m3b); m3ms(_m3, _m3, .36 * S.cubeSize);
+          pack(st, i, _m3, st.px[i], st.py[i] + .25 * Math.sin(TAU * (2 * ph + i / n)), st.pz[i]);
+          v3set(_col, st.baseR[i], st.baseG[i], st.baseB[i]); v3tm3(_v3b, _col, _m3c);
+          tint(st, i, _v3b[0], _v3b[1], _v3b[2]); } },
+      readout: (st, ph) => `t = ${pingpong(ph).toFixed(3)} · G = 709 luma` },
+    { name: "Channel Mixer Cycle", formula: "M = (1−f)Pₖ + f·Pₖ₊₁, k = ⌊3φ⌋", desc: "RGB→GBR→BRG→RGB — three permutation matrices crossfaded on a closed triangle.", grid: .9, gy: 1.6, colorBase: true,
+      alloc(st) { st.P = [new Float32Array(9), new Float32Array(9), new Float32Array(9)];
+        m3id(st.P[0]); m3mix(st.P[1], 0, 1, 0, 0, 0, 1, 1, 0, 0); m3mix(st.P[2], 0, 0, 1, 1, 0, 0, 0, 1, 0); },
+      frame(st, ph, n) { const seg = ph * 3, k = Math.floor(seg) % 3, f = smooth01(seg - Math.floor(seg));
+        m3ms(_m3c, st.P[k], 1 - f);
+        for (let j = 0; j < 9; j++) _m3c[j] += st.P[(k + 1) % 3][j] * f;
+        m3axis(_m3b, 0, 1, 0, TAU * ph);
+        const g = Math.ceil(Math.sqrt(n)), h = (g - 1) * .45;
+        for (let i = 0; i < n; i++) { m3copy(_m3, _m3b); m3ms(_m3, _m3, .5 * S.cubeSize);
+          pack(st, i, _m3, (i % g) * .9 - h, 1.6, ((i / g) | 0) * .9 - h);
+          v3set(_col, st.baseR[i], st.baseG[i], st.baseB[i]); v3tm3(_v3b, _col, _m3c);
+          tint(st, i, _v3b[0], _v3b[1], _v3b[2]); } },
+      readout: (st, ph) => `P${Math.floor(ph * 3) % 3} → P${(Math.floor(ph * 3) + 1) % 3}` },
+    { name: "Reflection Hall", formula: "p′ = F·p, R± = Rz(±2π·2φ)", desc: "Half the field lives through reflection matrices and counter-rotates in perfect symmetry.", grid: .9, gy: 1.8,
+      frame(st, ph, n) { const g = Math.ceil(Math.sqrt(n)), h = (g - 1) * .45;
+        for (let i = 0; i < n; i++) { const mir = i % 2;
+          let x = (i % g) * .9 - h, z = ((i / g) | 0) * .9 - h;
+          if (mir) { x = -x; z = -z; }
+          m3axis(_m3a, 0, 1, 0, TAU * ph); m3axis(_m3b, 0, 0, 1, TAU * 2 * ph * (mir ? -1 : 1));
+          m3mul(_m3, _m3a, _m3b); m3ms(_m3, _m3, .48 * S.cubeSize);
+          pack(st, i, _m3, x, 1.8 + .3 * Math.sin(TAU * (ph + i / n)), z);
+          if (mir) tint(st, i, .95, .35, .75); else tint(st, i, .3, .85, .95); } } },
+    // ---- PART 4 (16–20) ----
+    { name: "Look-At Swarm", formula: "f = normalize(T(φ)−p), T = Lissajous(2,3)", desc: "Every cube aims a right-handed basis at a glowing target on a closed Lissajous curve.", scatter: 3.5,
+      frame(st, ph, n) {
+        v3set(_v3c, 2.6 * Math.sin(TAU * 2 * ph), 2.6 + 1.5 * Math.sin(TAU * 3 * ph), 2.6 * Math.cos(TAU * 2 * ph));
+        for (let i = 0; i < n; i++) { v3set(_v3, st.px[i], st.py[i], st.pz[i]);
+          v3sub(_v3b, _v3c, _v3); m3orient(_m3, _v3b[0], _v3b[1], _v3b[2]);
+          m3scaleCols(_m3, .3 * S.cubeSize, .3 * S.cubeSize, 1.15 * S.cubeSize);
+          pack(st, i, _m3, _v3[0], _v3[1], _v3[2]); tint(st, i, st.tint[0], st.tint[1], st.tint[2]); }
+        if (n) { m3axis(_m3, 0, 1, 0, TAU * 3 * ph); m3ms(_m3, _m3, .45 * S.cubeSize);
+          pack(st, 0, _m3, _v3c[0], _v3c[1], _v3c[2]); tint(st, 0, 1.8, 1.5, .6); } },
+      readout: (st, ph) => `T = (${(2.6 * Math.sin(TAU * 2 * ph)).toFixed(2)}, ${(2.6 + 1.5 * Math.sin(TAU * 3 * ph)).toFixed(2)}, ${(2.6 * Math.cos(TAU * 2 * ph)).toFixed(2)})` },
+    { name: "FABRIK Spines", formula: "forward/backward reach, target = circle(2πφ)", desc: "Real FABRIK chains solve toward closed-circle targets; bones orient along each solved segment.",
+      alloc(st) { st.chains = null; },
+      seed: async (st, rng, alive) => {
+        const B = 12, count = Math.min(96, Math.floor(CAP / B)); st.chains = [];
+        await chunked(count, (c) => {
+          const pos = new Float32Array(B * 3), lens = new Float32Array(B - 1);
+          const a = c / count * TAU, r = 1.2 + (c % 4) * .7;
+          for (let b = 0; b < B; b++) { pos[b * 3] = Math.cos(a) * r; pos[b * 3 + 1] = .3 + b * .42; pos[b * 3 + 2] = Math.sin(a) * r; }
+          for (let b = 0; b < B - 1; b++) lens[b] = .46;
+          st.chains.push({ pos, lens, a, r, ph0: rng() });
+        }, alive, 16);
+      },
+      frame(st, ph, n) { const B = 12, chains = st.chains ? Math.min(st.chains.length, Math.floor(n / B)) : 0;
+        for (let c = 0; c < chains; c++) { const ch = st.chains[c], tp = TAU * (ph + ch.ph0);
+          v3set(_v3c, Math.cos(ch.a) * ch.r + 1.6 * Math.cos(tp), 3.4 + 1.1 * Math.sin(TAU * 2 * (ph + ch.ph0)), Math.sin(ch.a) * ch.r + 1.6 * Math.sin(tp));
+          fabrik(ch.pos, ch.lens, _v3c, .001); fabrik(ch.pos, ch.lens, _v3c, .001);
+          for (let b = 0; b < B; b++) { const i = c * B + b, o = b * 3;
+            const nx = b < B - 1 ? ch.pos[o + 3] - ch.pos[o] : ch.pos[o] - ch.pos[o - 3];
+            const ny = b < B - 1 ? ch.pos[o + 4] - ch.pos[o + 1] : ch.pos[o + 1] - ch.pos[o - 2];
+            const nz = b < B - 1 ? ch.pos[o + 5] - ch.pos[o + 2] : ch.pos[o + 2] - ch.pos[o - 1];
+            m3orient(_m3, nx, ny, nz); m3ms(_m3, _m3, Math.max(.08, (.34 - b * .014) * S.cubeSize));
+            pack(st, i, _m3, ch.pos[o], ch.pos[o + 1], ch.pos[o + 2]);
+            tint(st, i, st.tint[0] * (1 - b / B) + .2, st.tint[1], st.tint[2] * (b / B) + .3); } }
+        for (let i = chains * B; i < n; i++) { m3uni(_m3, .0001); pack(st, i, _m3, 0, -50, 0); tint(st, i, 0, 0, 0); } },
+      readout: (st) => `${st.chains ? Math.min(st.chains.length, Math.floor(S.density / 12)) : 0} chains × 12 bones · 2 iters/frame` },
+    { name: "Spring Chase", formula: "critically damped ω = 2/tₛ, closed targets", desc: "Pre-warmed critically-damped springs chase closed curves — the steady state loops seamlessly.",
+      alloc(st) { st.cx = new Float32Array(CAP); st.cy = new Float32Array(CAP); st.cz = new Float32Array(CAP);
+        st.vx = new Float32Array(CAP); st.vy = new Float32Array(CAP); st.vz = new Float32Array(CAP); st.off = new Float32Array(CAP); },
+      seed: async (st, rng, alive) => {
+        const cur = new Float32Array(3), tgt = new Float32Array(3), vel = new Float32Array(3);
+        const steps = 240, dt = (2 * S.loopSec) / steps;
+        await chunked(CAP, (i) => {
+          const off = rng(); st.off[i] = off;
+          const a0 = TAU * off; v3set(cur, 2.8 * Math.cos(a0), 2.6 + 1.4 * Math.sin(2 * a0), 2.8 * Math.sin(a0));
+          vel[0] = vel[1] = vel[2] = 0;
+          for (let s = 0; s < steps; s++) { const a = TAU * (off + (s * dt) / S.loopSec);
+            v3set(tgt, 2.8 * Math.cos(a), 2.6 + 1.4 * Math.sin(2 * a), 2.8 * Math.sin(a));
+            spring3(cur, cur, tgt, vel, .22, dt); }
+          st.cx[i] = cur[0]; st.cy[i] = cur[1]; st.cz[i] = cur[2];
+          st.vx[i] = vel[0]; st.vy[i] = vel[1]; st.vz[i] = vel[2];
+        }, alive, 256);
+      },
+      frame(st, ph, n, dt) { const step = Math.min(dt, .05);
+        const cur = new Float32Array(3), tgt = new Float32Array(3), vel = new Float32Array(3);
+        for (let i = 0; i < n; i++) { const a = TAU * (ph + st.off[i]);
+          v3set(tgt, 2.8 * Math.cos(a), 2.6 + 1.4 * Math.sin(2 * a), 2.8 * Math.sin(a));
+          v3set(cur, st.cx[i], st.cy[i], st.cz[i]); v3set(vel, st.vx[i], st.vy[i], st.vz[i]);
+          spring3(cur, cur, tgt, vel, .22, step);
+          st.cx[i] = cur[0]; st.cy[i] = cur[1]; st.cz[i] = cur[2];
+          st.vx[i] = vel[0]; st.vy[i] = vel[1]; st.vz[i] = vel[2];
+          const sp = v3len(vel);
+          if (sp > .05) m3orient(_m3, vel[0], vel[1], vel[2]); else m3id(_m3);
+          m3ms(_m3, _m3, .3 * S.cubeSize);
+          pack(st, i, _m3, cur[0], cur[1], cur[2]);
+          tint(st, i, st.tint[0] + Math.min(.6, sp * .1), st.tint[1], st.tint[2]); } } },
+    { name: "Scale Pipeline mm→Mpc", formula: "N = diag(1/span), span = 10^(−3…6)", desc: "The cloud renormalizes through world-bounds matrices while its true span sweeps millimeters to megaparsecs.", scatter: 3.2,
+      frame(st, ph, n) { const expo = -3 + 9 * pingpong(ph), span = Math.pow(10, expo);
+        st._span = span; st._expo = expo; const inv = 1 / span;
+        m3uni(_m3a, inv);
+        for (let i = 0; i < n; i++) {
+          v3set(_v3, st.px[i] * span, st.py[i] * span, st.pz[i] * span);
+          v3tm3(_v3b, _v3, _m3a);
+          const k = (i & 255) / 256;
+          m3axis(_m3, 0, 1, 0, TAU * ph + k * TAU);
+          m3ms(_m3, _m3, .28 * S.cubeSize * (.85 + .15 * Math.sin(TAU * (ph + k))));
+          pack(st, i, _m3, _v3b[0], _v3b[1], _v3b[2]);
+          tint(st, i, .3 + .7 * k, st.tint[1] * (1 - .5 * k) + .3, 1 - .6 * k); } },
+      readout: (st) => st._span ? `span = 10^${st._expo.toFixed(2)} m (${st._span.toExponential(2)} m)` : "span sweep" },
+    { name: "mat2d Lift", formula: "M₃ = lift(R₂·K₂) onto XZ", desc: "mat2 rotation × shear composed in 2D and lifted onto the ground — the 2D→3D seam.", grid: .95, gy: .35,
+      frame(st, ph, n) { const g = Math.ceil(Math.sqrt(n)), h = (g - 1) * .475, k = .45 * Math.sin(TAU * 2 * ph);
+        for (let i = 0; i < n; i++) { const ix = i % g, iz = (i / g) | 0, checker = (ix + iz) % 2;
+          m2rot(_m2, TAU * ph + checker * Math.PI * .5); m2shear(_m2b, k, 0); m2mul(_m2c, _m2b, _m2);
+          const a = _m2c[0], b = _m2c[1], c = _m2c[2], d = _m2c[3];
+          m3set(_m3, a, 0, b, 0, 1, 0, c, 0, d); m3ms(_m3, _m3, .55 * S.cubeSize);
+          pack(st, i, _m3, ix * .95 - h, .35, iz * .95 - h);
+          if (checker) tint(st, i, st.tint[0], st.tint[1], st.tint[2]); else tint(st, i, .9, .8, .3); } },
+      readout: (st, ph) => `k = ${(.45 * Math.sin(TAU * 2 * ph)).toFixed(3)} · θ = ${(ph * 360).toFixed(0)}°` }
+  ];
+
+  // ==========================================================================
+  // 8. RENDER LOOP (engine modes) + HUD MONITOR (always on)
+  // ==========================================================================
+  function renderLoop(t) {
+    if (disposed || !engineActive) { renderRaf = 0; return; }
+    renderRaf = requestAnimationFrame(renderLoop);
+    const dt = Math.min(.1, Math.max(0, (t - lastT) / 1000 || .016)); lastT = t;
+    if (S.playing) simT += dt * S.speed;
+    phase = (simT / S.loopSec) % 1;
+    const n = Math.min(CAP, S.density | 0);
+    let total = 0;
+    for (const st of stations) {
+      if (!st.ready) { st.mesh.count = 0; continue; }
+      st.mesh.count = n; total += n;
+      try { st.def.frame(st, phase, n, dt); flush(st); }
+      catch (err) { st.ready = false; st.mesh.count = 0; if (!st.errOnce) { st.errOnce = true; toast("Stage disabled: " + errText(err)); } }
+    }
+    liveCubes = total;
+    m3axis(_m3, 0, 1, 0, TAU * ((simT / (S.loopSec * 8)) % 1));
+    v3set(_v3, 0, 0, 0); m4m3t(_m4, _m3, _v3);
+    stars.matrix.fromArray(_m4); stars.matrixWorldNeedsUpdate = true;
+    updateCamera(dt);
+    renderer.render(scene, camera);
+    liveCalls = renderer.info.render.calls;
+    projectChips();
+  }
+  function projectChips() { /* chips are DOM-fixed; projected labels not needed — info readout below */ }
+  let hudAcc = 0, hudN = 0, hudTimer = 0, hudLast = 0;
+  function monitorLoop(t) {
+    if (disposed) return;
+    monitorRaf = requestAnimationFrame(monitorLoop);
+    const dt = Math.min(.25, Math.max(0, (t - hudLast) / 1000 || .016)); hudLast = t;
+    hudAcc += dt; hudN++; hudTimer += dt;
+    if (hudTimer >= .5) {
+      const fps = Math.round(hudN / hudAcc), ms = (hudAcc / hudN * 1000);
+      $("hFps").textContent = fps;
+      $("hMs").textContent = ms.toFixed(1);
+      const dot = $("fpsDot");
+      dot.className = fps >= 48 ? "" : fps >= 28 ? "warn" : "bad";
+      dot.id = "fpsDot";
+      const mem = performance.memory;
+      $("hHeap").textContent = mem ? (mem.usedJSHeapSize / 1048576).toFixed(1) + " MB" : "n/a";
+      $("hGpu").textContent = (gpuBytes / 1048576).toFixed(1) + " MB";
+      if (nativeApi) {
+        const inst = document.querySelector("#lab #inst"), calls = document.querySelector("#lab #calls");
+        $("hCubes").textContent = inst ? inst.textContent : "—";
+        $("hCalls").textContent = calls ? calls.textContent : "—";
+      } else {
+        $("hCubes").textContent = liveCubes.toLocaleString();
+        $("hCalls").textContent = liveCalls;
+      }
+      const ro = $("roLine"), st = stations[S.selected];
+      if (ro && st && st.def.readout) ro.textContent = "· " + st.def.readout(st, phase);
+      hudAcc = 0; hudN = 0; hudTimer = 0;
+    }
+  }
+  function updateGpuHud() { $("hGpu").textContent = (gpuBytes / 1048576).toFixed(1) + " MB"; }
+
+  // ==========================================================================
+  // 9. NATIVE PART INTEGRATION + SEAMLESS LOADER
+  // ==========================================================================
+  let nativeApi = null, loading = false;
+  const partMode = ["attract", "kernel", "kernel", "kernel", "kernel"]; // updated per load
+
+  function cleanupDemoDom() {
+    for (const id of ["lab", "boot", "help", "toasts"]) {
+      const el = document.getElementById(id);
+      if (el && el !== helpEl && el !== toastsEl && el !== bootEl) el.remove();
+    }
+    // remove only part-injected styles (external css is a <link>, survives)
+    document.querySelectorAll("style").forEach((s) => {
+      const txt = s.textContent || "";
+      if (txt.includes("#lab{position:fixed") || txt.includes("--dom:#7c3aed;--a1")) s.remove();
+    });
+  }
+  async function disposeNative() {
+    if (nativeApi) { try { nativeApi.dispose && nativeApi.dispose(); } catch (e) {} nativeApi = null; }
+    for (const p of PARTS) for (const g of p.globals) {
+      const api = window[g];
+      if (api && typeof api.dispose === "function") { try { await api.dispose(); } catch (e) {} }
+      try { delete window[g]; } catch (e) { window[g] = undefined; }
+    }
+    cleanupDemoDom();
+    document.body.classList.remove("native");
+  }
+  function integrateNative(api) {
+    nativeApi = api;
+    document.body.classList.add("native");
+    engineActive = false; cancelAnimationFrame(renderRaf); renderRaf = 0;
+    try {
+      api.setParam("autoOrbit", S.autoOrbit);
+      api.setParam("speed", S.speed);
+      api.setParam("density", Math.min(8192, S.density));
+      api.setParam("cubeSize", S.cubeSize);
+      api.setParam("emissive", S.glow);
+      api.setParam("palette", S.palette);
+      api.setParam("quality", S.quality);
+      api.setParam("wireframe", S.wireframe);
+      api.setParam("playing", S.playing);
+      api.focus(-1);                              // centered overview orbit
+    } catch (e) {}
+    chipsEl.innerHTML = ""; infoEl.innerHTML = "";
+  }
+  async function loadPart(n) {
+    if (loading) return;
+    loading = true; loadBtn.disabled = cycleBtn.disabled = disposeBtn.disabled = true;
+    try {
+      await disposeNative();
+      S.part = n; S.selected = -1; select.value = String(n);
+      if (n === 0) {
+        engineActive = true; await buildPart(0);
+        if (!renderRaf) { lastT = performance.now(); renderRaf = requestAnimationFrame(renderLoop); }
+        setStatus("Attract scene active — orbit is locked to the scene center.", "ok");
+        return;
+      }
+      const part = PARTS.find((p) => p.n === n);
+      setStatus("Importing " + part.file + "…");
+      let mod = null, err = null;
+      try { mod = await import(part.file + "?t=" + Date.now()); } catch (e) { err = e; }
+      const api = mod && (mod.default || mod);
+      if (api && typeof api.focus === "function") {
+        // native boot: parts auto-boot on import; ensure global api present
+        if (!window[part.globals[0]] && typeof api.boot === "function") { try { await api.boot(); } catch (e) { err = e; } }
+        const live = window[part.globals[0]] || api;
+        if (!err && live && document.getElementById("lab")) {
+          partMode[n] = "live";
+          integrateNative(live);
+          setStatus("Part " + n + " LIVE — " + part.label + ".\nNative runtime centered; minimal strip controls it.", "ok");
+          toast("Part " + n + " live — stages " + String((n - 1) * 5 + 1).padStart(2, "0") + "–" + String(n * 5).padStart(2, "0"));
+          return;
+        }
+      }
+      // graceful kernel fallback: same five stages, same formulas, zero interruption
+      partMode[n] = "kernel";
+      engineActive = true; await buildPart(n);
+      if (!renderRaf) { lastT = performance.now(); renderRaf = requestAnimationFrame(renderLoop); }
+      setStatus(
+        "Part " + n + " KERNEL — " + part.label + ".\n" +
+        (err ? "File parse failed: " + errText(err).slice(0, 140) + "\n" : "") +
+        "The launcher renders this part's exact 5 stages internally so the examples stay visible. Fix the file and reload to go LIVE.",
+        "warn"
+      );
+      toast("Part " + n + " · stages " + String((n - 1) * 5 + 1).padStart(2, "0") + "–" + String(n * 5).padStart(2, "0"));
+    } finally {
+      loading = false; loadBtn.disabled = cycleBtn.disabled = disposeBtn.disabled = false;
+    }
+  }
+
+  // ==========================================================================
+  // 10. MINIMAL CONTROL STRIP — live in both native and kernel modes
+  // ==========================================================================
+  function applyParam(k) {
+    if (nativeApi) {
+      const map = { speed: "speed", density: "density", cubeSize: "cubeSize", glow: "emissive", palette: "palette", quality: "quality", autoOrbit: "autoOrbit", wireframe: "wireframe", playing: "playing" };
+      try { nativeApi.setParam(map[k], k === "density" ? Math.min(8192, S[k]) : S[k]); } catch (e) {}
+      if (k === "palette") applyCssPalette(S.palette);
+      return;
+    }
+    if (!renderer) return;
+    switch (k) {
+      case "glow": for (const st of stations) st.mesh.material.emissiveIntensity = S.glow; break;
+      case "wireframe": for (const st of stations) st.mesh.material.wireframe = S.wireframe; break;
+      case "palette": applyEnginePalette(); break;
+      case "quality": renderer.setPixelRatio(Math.min(devicePixelRatio || 1, S.quality)); resize(); break;
+      case "playing": case "speed": if (audio) audio.setAmb(S.playing && S.sound ? .05 * Math.min(1.4, .4 + S.speed) : 0); break;
+    }
+  }
+    
+  function bindControls() {
+    const range = (id, out, key, fmt) => {
+      const inp = $(id), o = $(out);
+      inp.addEventListener("input", () => { S[key] = parseFloat(inp.value); o.textContent = fmt(S[key]); applyParam(key); });
+      inp.addEventListener("change", tick);
+    };
+    range("cSpeed", "oSpeed", "speed", (v) => v.toFixed(2) + "×");
+    range("cDensity", "oDensity", "density", (v) => (v | 0).toLocaleString());
+    range("cSize", "oSize", "cubeSize", (v) => v.toFixed(2));
+    range("cGlow", "oGlow", "glow", (v) => v.toFixed(2));
+    $("cPalette").addEventListener("change", (e) => { S.palette = e.target.value; applyParam("palette"); tick(); });
+    $("cQuality").addEventListener("change", (e) => { S.quality = parseFloat(e.target.value); applyParam("quality"); tick(); });
+    const tgl = (id, key) => { const b = $(id);
+      b.addEventListener("click", () => { S[key] = !S[key]; b.setAttribute("aria-pressed", String(S[key])); applyParam(key); tick(); }); };
+    tgl("cOrbit", "autoOrbit"); tgl("cWire", "wireframe");
+    $("bPause").addEventListener("click", togglePause);
+    $("bCenter").addEventListener("click", recenter);
+    $("bReset").addEventListener("click", resetAll);
+    $("bRandom").addEventListener("click", randomize);
+    $("bExport").addEventListener("click", exportPNG);
+    loadBtn.addEventListener("click", () => loadPart(parseInt(select.value, 10) || 0));
+    cycleBtn.addEventListener("click", () => loadPart(S.part >= 4 ? 1 : S.part + 1));
+    disposeBtn.addEventListener("click", () => loadPart(0));
+    select.addEventListener("change", () => setStatus("Selected " + select.options[select.selectedIndex].text + ". Press “Load selected”."));
+    $("panelBtn").addEventListener("click", () => { panel.open = !panel.open; });
+    $("sndBtn").addEventListener("click", toggleSound);
+    $("helpBtn").addEventListener("click", () => helpEl.classList.toggle("open"));
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pagehide", fullDispose, { once: true });
+  }
+  function syncStrip() {
+    $("cSpeed").value = S.speed; $("oSpeed").textContent = S.speed.toFixed(2) + "×";
+    $("cDensity").value = S.density; $("oDensity").textContent = (S.density | 0).toLocaleString();
+    $("cSize").value = S.cubeSize; $("oSize").textContent = S.cubeSize.toFixed(2);
+    $("cGlow").value = S.glow; $("oGlow").textContent = S.glow.toFixed(2);
+    $("cPalette").value = S.palette; $("cQuality").value = String(S.quality);
+    $("cOrbit").setAttribute("aria-pressed", String(S.autoOrbit));
+    $("cWire").setAttribute("aria-pressed", String(S.wireframe));
+    $("bPause").textContent = S.playing ? "⏸ Pause" : "▶ Play";
+  }
+  function togglePause() { S.playing = !S.playing; applyParam("playing"); syncStrip(); tick(); }
+  function recenter() {
+    if (nativeApi) { try { nativeApi.focus(-1); } catch (e) {} }
+    cam.tTheta = .7; cam.tPhi = 1.05; cam.tDist = 34;
+    toast("Camera recentered on scene center"); tick();
+  }
+  function resetAll() {
+    Object.assign(S, { speed: 1, density: 1024, cubeSize: 1, glow: 1.1, palette: "nebula", quality: 1.5, autoOrbit: true, wireframe: false, playing: true, seed: 1 });
+    simT = 0;
+    for (const k of ["speed", "density", "cubeSize", "glow", "palette", "quality", "autoOrbit", "wireframe", "playing"]) applyParam(k);
+    if (!nativeApi) { const token = ++seedToken; for (const st of stations) seedStation(st, token); }
+    syncStrip(); recenter(); toast("All parameters reset");
+  }
+  function randomize() {
+    S.seed = (Math.random() * 2147483647) | 0;
+    if (nativeApi && nativeApi.randomize) { try { nativeApi.randomize(); } catch (e) {} }
+    else { const token = ++seedToken; for (const st of stations) seedStation(st, token); }
+    toast("Seed → " + S.seed); tick();
+  }
+  function exportPNG() {
+    try {
+      if (nativeApi && nativeApi.exportPNG) { nativeApi.exportPNG(); return; }
+      updateCamera(0); renderer.render(scene, camera);
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png");
+      a.download = "mat3-lab-part" + S.part + "-" + Date.now() + ".png";
+      a.click(); toast("Frame exported as PNG");
+    } catch (e) { toast("Export failed: " + errText(e)); }
+  }
+  function onKey(e) {
+    const tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    switch (e.key) {
+      case " ": e.preventDefault(); togglePause(); break;
+      case "ArrowRight": loadPart(S.part >= 4 ? 1 : S.part + 1); break;
+      case "ArrowLeft": loadPart(S.part <= 1 ? 4 : S.part - 1); break;
+      case "o": case "O": recenter(); break;
+      case "r": case "R": randomize(); break;
+      case "e": case "E": exportPNG(); break;
+      case "m": case "M": toggleSound(); break;
+      case "h": case "H": case "?": helpEl.classList.toggle("open"); break;
+      case "Escape": helpEl.classList.remove("open"); panel.open = false; break;
+      default: if (e.key >= "1" && e.key <= "4") loadPart(parseInt(e.key, 10)); else if (e.key === "0") loadPart(0);
+    }
+  }
+
+  // ==========================================================================
+  // 11. AUDIO — every sound tied to a visible event; one global mute.
+  // ==========================================================================
+  let audio = null;
+  function ensureAudio() {
+    if (audio || !S.sound) return;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext; if (!Ctx) return;
+      const ctx = new Ctx(), master = ctx.createGain(); master.gain.value = 1; master.connect(ctx.destination);
+      const amb = ctx.createGain(); amb.gain.value = 0;
+      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 300;
+      const o1 = ctx.createOscillator(); o1.type = "triangle"; o1.frequency.value = 55;
+      const o2 = ctx.createOscillator(); o2.type = "sine"; o2.frequency.value = 82.5;
+      o1.connect(lp); o2.connect(lp); lp.connect(amb); amb.connect(master); o1.start(); o2.start();
+      amb.gain.linearRampToValueAtTime(.05, ctx.currentTime + 2);
+      audio = { ctx, master,
+        setAmb(v) { amb.gain.linearRampToValueAtTime(v, ctx.currentTime + .4); },
+        blip(f, d, g) { const o = ctx.createOscillator(), gn = ctx.createGain(); o.type = "sine"; o.frequency.value = f;
+          gn.gain.setValueAtTime(g, ctx.currentTime); gn.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime + d);
+          o.connect(gn); gn.connect(master); o.start(); o.stop(ctx.currentTime + d); } };
+    } catch (e) {}
+  }
+  function tick() { if (audio && S.sound) audio.blip(880, .07, .06); }
+  function toggleSound() {
+    S.sound = !S.sound;
+    const b = $("sndBtn"); b.textContent = S.sound ? "♪ ON" : "♪ OFF"; b.classList.toggle("on", S.sound);
+    if (S.sound) { ensureAudio(); if (audio) { audio.master.gain.value = 1; audio.setAmb(S.playing ? .05 : 0); } }
+    else if (audio) audio.master.gain.value = 0;
+  }
+
+  // ==========================================================================
+  // 12. HELP / DISPOSE / BOOT
+  // ==========================================================================
+  let helpBackdropBound = false;
+  function buildHelp() {
+    const modRows = MOD_STATUS.map((m) =>
+      `<tr><td>${m.url.replace("./math/", "")}</td><td style="color:${m.live ? "var(--ok)" : "var(--bad)"}">${m.live ? "LIVE" : "KERNEL"}${m.err ? " — " + m.err.replace(/</g, "&lt;") : ""}</td></tr>`).join("");
+    const partRows = PARTS.map((p) =>
+      `<tr><td>${p.file.replace("./", "")}</td><td style="color:${partMode[p.n] === "live" ? "var(--ok)" : "var(--warn)"}">${partMode[p.n].toUpperCase()}</td></tr>`).join("");
+    helpEl.innerHTML = `<div class="hcard">
+      <button class="hbtn x" id="helpX">✕ close</button>
+      <h2>⟦M₃⟧ Matrix Lab — launcher diagnostics</h2>
+      <p>The orbit camera is locked to the exact scene center. Every transform is computed by the provided ./math modules; a glMatrix-identical kernel fills only modules or part files that currently fail to parse, so all 20 examples remain visible. The HUD reports real frame rate, JS heap (performance.memory where available) and tracked GPU buffer bytes.</p>
+      <h4>Controls</h4>
+      <table>
+        <tr><td>drag / wheel / pinch</td><td>orbit center · zoom</td></tr>
+        <tr><td>← → / 1…4 / 0</td><td>switch part · attract</td></tr>
+        <tr><td>Space / O / R / E / M</td><td>pause · recenter · randomize · export · mute</td></tr>
+      </table>
+      <h4>Math modules</h4><table>${modRows}</table>
+      <h4>Part runtimes</h4><table>${partRows}</table>
+    </div>`;
+    helpEl.querySelector("#helpX").addEventListener("click", () => helpEl.classList.remove("open"));
+    if (!helpBackdropBound) {
+      helpBackdropBound = true;
+      helpEl.addEventListener("click", (e) => { if (e.target === helpEl) helpEl.classList.remove("open"); });
+    }
+  }
+  function refreshHelpParts() { if (helpEl.classList.contains("open")) buildHelp(); }
+  function fullDispose() {
+    disposed = true;
+    cancelAnimationFrame(renderRaf); cancelAnimationFrame(monitorRaf);
+    renderRaf = monitorRaf = 0;
+    window.removeEventListener("keydown", onKey);
+    if (ro) { ro.disconnect(); ro = null; }
+    disposeNative();
+    if (renderer) {
+      canvas.removeEventListener("webglcontextlost", onCtxLost);
+      canvas.removeEventListener("webglcontextrestored", onCtxRestored);
+      disposeStations();
+      boxGeo.dispose();
+      ground.geometry.dispose(); ground.material.map.dispose(); ground.material.dispose();
+      grid.geometry.dispose(); grid.material.dispose();
+      stars.geometry.dispose(); stars.material.dispose();
+      if (envRT) envRT.dispose();
+      pmrem.dispose(); renderer.dispose();
+    }
+    if (audio) { try { audio.ctx.close(); } catch (e) {} audio = null; }
+    pointers.clear();
+  }
+
+  async function boot() {
+    panel.open = false;
+    try {
+      await loadMath();
+      bootMsg.textContent = "loading three.js r185 (CDN)…";
+      THREE = await loadThree();
+      bootMsg.textContent = "building engine + attract scene…";
+      initEngine();
+      bindControls();
+      buildHelp();
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) { S.autoOrbit = false; S.speed = .6; }
+      syncStrip();
+      engineActive = true;
+      await buildPart(0);
+      lastT = performance.now(); hudLast = lastT;
+      renderRaf = requestAnimationFrame(renderLoop);
+      monitorRaf = requestAnimationFrame(monitorLoop);
+      bootEl.classList.add("gone");
+      setTimeout(() => bootEl.remove(), 600);
+      const live = MOD_STATUS.filter((m) => m.live).length;
+      setStatus("Ready — " + live + "/7 math modules live. Open ☰ Parts and load a demo part; the camera stays centered on the scene.", "ok");
+      toast("Matrix Lab ready — drag to orbit the center");
+      // preload part 1 automatically for an immediately populated experience
+      await loadPart(1);
+      refreshHelpParts();
+    } catch (e) {
+      bootErr.style.display = "block";
+      bootErr.textContent = "Boot failed: " + errText(e);
+      bootRetry.style.display = "";
+      bootRetry.addEventListener("click", () => location.reload(), { once: true });
+    }
+  }
+  boot();
+  </script>
+</body>
+</html>

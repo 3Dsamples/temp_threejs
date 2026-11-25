@@ -1,0 +1,483 @@
+/* ============================================================================
+   File : 005_mat2_demo.css
+   Match: 005_mat2_demo.js (20 real-time mat2/vec2/vec3/vec4 examples, r185)
+   Desc : Full skin for the mat2 showcase panel + the AMOUNT / MULTIPLIER
+          slider group (.mat2-amount-group) that scales instance counts.
+   DOM contract (created by 04_mat2_demo.js + amount-group patch):
+     <div class="mat2-demo-panel" data-mode="rotField">
+       <div>title</div><select>…</select>
+       <div class="mat2-amount-group" data-mult="1">
+         <div class="mat2-amount-head"><span>…</span><span class="mat2-mult-badge">…</span></div>
+         <div class="mat2-amount-row"><span>Amount</span><input type="range"><span class="mat2-demo-value"></span></div>
+         <div class="mat2-mult-row"><span>Multiply x</span><input type="range" class="mat2-mult-slider"><span class="mat2-demo-value"></span></div>
+         <div class="mat2-mult-ticks"><span>x1</span><span>x2</span><span>x3</span><span>x4</span></div>
+       </div>
+       <div>…dynamic rows (grid 100px 1fr 48px)…</div>
+       <div>status</div><pre>info</pre>
+     </div>
+   License : MIT
+   ============================================================================ */
+
+:root {
+	color-scheme: dark;
+
+	--m2-bg-0: #05080d;
+	--m2-bg-1: #0a1017;
+	--m2-border-1: rgba(255, 255, 255, 0.08);
+	--m2-border-2: rgba(255, 255, 255, 0.14);
+	--m2-border-3: rgba(53, 200, 255, 0.30);
+
+	--m2-text-1: #eaf3fb;
+	--m2-text-2: #b4c4d4;
+	--m2-text-3: #7d8fa2;
+
+	--m2-accent: #35c8ff;
+	--m2-accent-soft: rgba(53, 200, 255, 0.14);
+	--m2-accent-2: #7cffb2;
+	--m2-accent-3: #ffb347;
+	--m2-danger: #ff5d73;
+	--m2-ok: #4ade80;
+
+	--m2-radius-sm: 7px;
+	--m2-radius-md: 12px;
+	--m2-radius-lg: 18px;
+
+	--m2-shadow-lg: 0 18px 60px rgba(0, 0, 0, 0.42);
+
+	--m2-font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+	--m2-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+	--m2-panel-width: 356px;
+	--m2-hud-gap: 12px;
+}
+
+/* Per-mode accent theming (panel carries data-mode) */
+.mat2-demo-panel[data-mode="rotField"]    { --m2-accent: #35c8ff; }
+.mat2-demo-panel[data-mode="aniso"]       { --m2-accent: #7cc4ff; }
+.mat2-demo-panel[data-mode="detHeat"]     { --m2-accent: #ff5d73; }
+.mat2-demo-panel[data-mode="shear"]       { --m2-accent: #ffb347; }
+.mat2-demo-panel[data-mode="reflect"]     { --m2-accent: #b48cff; }
+.mat2-demo-panel[data-mode="aspect"]      { --m2-accent: #7cffb2; }
+.mat2-demo-panel[data-mode="chroma"]      { --m2-accent: #ff8cf0; }
+.mat2-demo-panel[data-mode="blend"]       { --m2-accent: #4ade80; }
+.mat2-demo-panel[data-mode="decomp"]      { --m2-accent: #5eead4; }
+.mat2-demo-panel[data-mode="orbit2"]      { --m2-accent: #ffe28a; }
+.mat2-demo-panel[data-mode="ik2"]         { --m2-accent: #ff9f6e; }
+.mat2-demo-panel[data-mode="spring2"]     { --m2-accent: #8ea2ff; }
+.mat2-demo-panel[data-mode="flow2"]       { --m2-accent: #35c8ff; }
+.mat2-demo-panel[data-mode="voronoi2"]    { --m2-accent: #c8ff5e; }
+.mat2-demo-panel[data-mode="shell3"]      { --m2-accent: #7cffb2; }
+.mat2-demo-panel[data-mode="plasma4"]     { --m2-accent: #ff5d73; }
+.mat2-demo-panel[data-mode="homog"]       { --m2-accent: #7cc4ff; }
+.mat2-demo-panel[data-mode="quatSpin"]    { --m2-accent: #b48cff; }
+.mat2-demo-panel[data-mode="poolBench"]   { --m2-accent: #5eead4; }
+.mat2-demo-panel[data-mode="floatOrigin"] { --m2-accent: #ffe28a; }
+
+/* Multiplier steps re-tint the amount group */
+.mat2-amount-group[data-mult="2"] { --m2-accent-soft: rgba(124, 255, 178, 0.14); }
+.mat2-amount-group[data-mult="3"] { --m2-accent-soft: rgba(255, 179, 71, 0.16); }
+.mat2-amount-group[data-mult="4"] { --m2-accent-soft: rgba(255, 93, 115, 0.16); }
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html, body {
+	width: 100%; height: 100%;
+	margin: 0; padding: 0;
+	overflow: hidden;
+	background: var(--m2-bg-0);
+	color: var(--m2-text-1);
+	font-family: var(--m2-font-ui);
+	font-size: 14px;
+	line-height: 1.45;
+	-webkit-font-smoothing: antialiased;
+}
+
+body { touch-action: none; user-select: none; }
+
+#app, #mat2-demo, .mat2-demo-root {
+	position: relative;
+	width: 100%; height: 100%;
+	overflow: hidden;
+	isolation: isolate;
+	background:
+		radial-gradient(circle at 20% 20%, rgba(53, 200, 255, 0.08), transparent 42%),
+		radial-gradient(circle at 80% 80%, rgba(124, 255, 178, 0.05), transparent 40%),
+		linear-gradient(180deg, var(--m2-bg-0), var(--m2-bg-1));
+}
+
+#mat2-demo-canvas, .mat2-canvas {
+	position: absolute; inset: 0;
+	width: 100%; height: 100%;
+	display: block;
+	touch-action: none;
+	cursor: crosshair;
+	background: transparent;
+	outline: none;
+}
+
+/* ============================================================================
+   PANEL
+   ============================================================================ */
+.mat2-demo-panel,
+body > div[style*="fixed"]:not(#debug-panel):not(#boot-status) {
+	position: fixed !important;
+	top: var(--m2-hud-gap) !important;
+	right: var(--m2-hud-gap) !important;
+	z-index: 1000;
+	width: min(var(--m2-panel-width), calc(100vw - 24px)) !important;
+	max-height: calc(100vh - 24px) !important;
+	overflow: auto !important;
+	padding: 14px !important;
+	border: 1px solid var(--m2-border-2) !important;
+	border-radius: var(--m2-radius-lg) !important;
+	background: linear-gradient(180deg, rgba(16, 24, 35, 0.86), rgba(10, 16, 23, 0.84)) !important;
+	color: var(--m2-text-1) !important;
+	font-family: var(--m2-font-ui) !important;
+	font-size: 12px !important;
+	box-shadow: var(--m2-shadow-lg);
+	backdrop-filter: blur(14px) saturate(130%);
+	-webkit-backdrop-filter: blur(14px) saturate(130%);
+	contain: layout paint style;
+	scrollbar-width: thin;
+	scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.mat2-demo-panel::-webkit-scrollbar { width: 8px; height: 8px; }
+.mat2-demo-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 999px; }
+.mat2-demo-panel::-webkit-scrollbar-track { background: transparent; }
+
+.mat2-demo-panel > div:first-child {
+	margin: 0 0 10px !important;
+	font-size: 14px !important;
+	font-weight: 750;
+	letter-spacing: 0.02em;
+	color: var(--m2-text-1) !important;
+}
+
+/* mode select */
+.mat2-demo-panel select {
+	width: 100% !important;
+	min-height: 32px;
+	padding: 6px 30px 6px 10px !important;
+	border: 1px solid var(--m2-border-1) !important;
+	border-radius: var(--m2-radius-sm) !important;
+	background:
+		linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)) padding-box,
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23b4c4d4' d='M6 8.5 2.5 5h7z'/%3E%3C/svg%3E") no-repeat right 9px center / 12px 12px !important;
+	color: var(--m2-text-1) !important;
+	appearance: none;
+	outline: none;
+	cursor: pointer;
+	transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.mat2-demo-panel select:hover { border-color: var(--m2-border-2) !important; }
+.mat2-demo-panel select:focus-visible { border-color: var(--m2-border-3) !important; box-shadow: 0 0 0 3px var(--m2-accent-soft); }
+
+/* ============================================================================
+   AMOUNT + MULTIPLIER GROUP
+   ============================================================================ */
+.mat2-amount-group {
+	margin: 4px 0 12px;
+	padding: 10px 10px 8px;
+	border: 1px solid var(--m2-border-1);
+	border-radius: var(--m2-radius-md);
+	background: rgba(255, 255, 255, 0.03);
+}
+
+.mat2-amount-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 8px;
+	font-size: 10px;
+	font-weight: 800;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--m2-accent);
+}
+
+.mat2-mult-badge {
+	display: inline-flex;
+	align-items: center;
+	min-height: 20px;
+	padding: 2px 8px;
+	border: 1px solid var(--m2-border-3);
+	border-radius: 999px;
+	background: var(--m2-accent-soft);
+	color: var(--m2-text-1);
+	font: 700 10px/1 var(--m2-font-mono);
+	letter-spacing: 0.04em;
+	white-space: nowrap;
+}
+
+.mat2-amount-row,
+.mat2-mult-row {
+	display: grid !important;
+	grid-template-columns: 74px 1fr 44px !important;
+	gap: 8px;
+	align-items: center;
+	margin: 6px 0 !important;
+}
+
+.mat2-amount-row > span:first-child,
+.mat2-mult-row > span:first-child {
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--m2-text-2);
+	white-space: nowrap;
+}
+
+.mat2-demo-value,
+.mat2-amount-row > span:last-child,
+.mat2-mult-row > span:last-child {
+	text-align: right;
+	font-family: var(--m2-font-mono);
+	font-size: 11px;
+	color: var(--m2-text-1);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+/* multiplier slider: 4 discrete stops with tick stripes on the track */
+.mat2-mult-slider {
+	width: 100% !important;
+	height: 24px;
+	appearance: none;
+	-webkit-appearance: none;
+	background: transparent;
+	cursor: pointer;
+}
+
+.mat2-mult-slider::-webkit-slider-runnable-track {
+	height: 8px;
+	border-radius: 999px;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	background:
+		repeating-linear-gradient(90deg,
+			transparent 0 calc(33.333% - 2px),
+			rgba(255, 255, 255, 0.28) calc(33.333% - 2px) calc(33.333% + 1px)),
+		linear-gradient(90deg, var(--m2-accent), rgba(255, 255, 255, 0.10));
+}
+.mat2-mult-slider::-moz-range-track {
+	height: 8px;
+	border-radius: 999px;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	background:
+		repeating-linear-gradient(90deg,
+			transparent 0 calc(33.333% - 2px),
+			rgba(255, 255, 255, 0.28) calc(33.333% - 2px) calc(33.333% + 1px)),
+		linear-gradient(90deg, var(--m2-accent), rgba(255, 255, 255, 0.10));
+}
+.mat2-mult-slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	width: 18px; height: 18px;
+	margin-top: -6px;
+	border: 1px solid rgba(255, 255, 255, 0.32);
+	border-radius: 50%;
+	background: #eaffff;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+	transition: transform 80ms ease, box-shadow 120ms ease;
+}
+.mat2-mult-slider::-moz-range-thumb {
+	width: 18px; height: 18px;
+	border: 1px solid rgba(255, 255, 255, 0.32);
+	border-radius: 50%;
+	background: #eaffff;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.mat2-mult-slider:active::-webkit-slider-thumb {
+	transform: scale(1.12);
+	box-shadow: 0 0 0 6px var(--m2-accent-soft);
+}
+.mat2-mult-slider:focus-visible {
+	outline: 2px solid var(--m2-border-3);
+	outline-offset: 3px;
+	border-radius: 6px;
+}
+
+.mat2-mult-ticks {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	margin-top: 2px;
+	font: 600 9px/1 var(--m2-font-mono);
+	color: var(--m2-text-3);
+	text-align: center;
+	letter-spacing: 0.06em;
+}
+.mat2-amount-group[data-mult="1"] .mat2-mult-ticks span:nth-child(1),
+.mat2-amount-group[data-mult="2"] .mat2-mult-ticks span:nth-child(2),
+.mat2-amount-group[data-mult="3"] .mat2-mult-ticks span:nth-child(3),
+.mat2-amount-group[data-mult="4"] .mat2-mult-ticks span:nth-child(4) {
+	color: var(--m2-accent);
+	text-shadow: 0 0 8px var(--m2-accent-soft);
+}
+
+/* ============================================================================
+   GENERIC DYNAMIC ROWS / CONTROLS (demo-built)
+   ============================================================================ */
+.mat2-demo-panel div[style*="grid-template-columns"] {
+	display: grid !important;
+	grid-template-columns: 100px 1fr 48px !important;
+	gap: 6px;
+	align-items: center;
+	margin: 5px 0 !important;
+}
+
+.mat2-demo-panel div[style*="grid-template-columns"] > span:first-child {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--m2-text-2) !important;
+}
+
+.mat2-demo-panel input[type="range"] {
+	width: 100% !important;
+	height: 24px;
+	appearance: none;
+	-webkit-appearance: none;
+	background: transparent;
+	cursor: pointer;
+	accent-color: var(--m2-accent);
+}
+.mat2-demo-panel input[type="range"]::-webkit-slider-runnable-track {
+	height: 6px; border-radius: 999px;
+	border: 1px solid rgba(255,255,255,0.06);
+	background: linear-gradient(90deg, var(--m2-accent), rgba(255,255,255,0.10));
+}
+.mat2-demo-panel input[type="range"]::-moz-range-track {
+	height: 6px; border-radius: 999px;
+	border: 1px solid rgba(255,255,255,0.06);
+	background: linear-gradient(90deg, var(--m2-accent), rgba(255,255,255,0.10));
+}
+.mat2-demo-panel input[type="range"]::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	width: 16px; height: 16px; margin-top: -6px;
+	border: 1px solid rgba(255,255,255,0.28);
+	border-radius: 50%;
+	background: #eaffff;
+	box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
+.mat2-demo-panel input[type="range"]::-moz-range-thumb {
+	width: 16px; height: 16px;
+	border: 1px solid rgba(255,255,255,0.28);
+	border-radius: 50%;
+	background: #eaffff;
+}
+.mat2-demo-panel input[type="range"]:focus-visible {
+	outline: 2px solid var(--m2-border-3);
+	outline-offset: 3px;
+	border-radius: 6px;
+}
+
+.mat2-demo-panel label[style*="display:flex"] {
+	display: flex !important;
+	align-items: center;
+	gap: 8px;
+	min-height: 28px;
+	margin: 7px 0 !important;
+	cursor: pointer;
+	color: var(--m2-text-2);
+}
+.mat2-demo-panel input[type="checkbox"] {
+	width: 15px; height: 15px; margin: 0;
+	accent-color: var(--m2-accent);
+	cursor: pointer;
+}
+.mat2-demo-panel input[type="checkbox"]:focus-visible {
+	outline: 2px solid var(--m2-border-3);
+	outline-offset: 2px;
+	border-radius: 4px;
+}
+
+.mat2-demo-panel button {
+	width: 100% !important;
+	margin: 7px 0 !important;
+	padding: 8px 12px !important;
+	border: 1px solid var(--m2-border-3) !important;
+	border-radius: var(--m2-radius-sm) !important;
+	background: linear-gradient(180deg, var(--m2-accent-soft), rgba(255,255,255,0.03)) !important;
+	color: var(--m2-text-1) !important;
+	font: 650 12px/1.2 var(--m2-font-ui) !important;
+	cursor: pointer;
+	transition: background 120ms ease, border-color 120ms ease, transform 80ms ease;
+}
+.mat2-demo-panel button:hover {
+	border-color: var(--m2-accent) !important;
+	background: linear-gradient(180deg, rgba(53,200,255,0.22), rgba(53,200,255,0.10)) !important;
+}
+.mat2-demo-panel button:active { transform: translateY(1px); }
+.mat2-demo-panel button:focus-visible { outline: 2px solid var(--m2-border-3); outline-offset: 2px; }
+.mat2-demo-panel button[disabled] { opacity: 0.45; cursor: not-allowed; filter: saturate(0.6); }
+
+/* ============================================================================
+   READOUTS
+   ============================================================================ */
+.mat2-demo-panel div[style*="min-height"] {
+	margin-top: 10px !important;
+	min-height: 18px;
+	color: var(--m2-text-3) !important;
+	font-family: var(--m2-font-mono) !important;
+	font-size: 11px !important;
+}
+
+.mat2-demo-panel pre {
+	margin: 10px 0 0 !important;
+	padding: 10px 11px !important;
+	border: 1px solid var(--m2-border-1) !important;
+	border-radius: var(--m2-radius-md) !important;
+	background: rgba(0, 0, 0, 0.26) !important;
+	color: var(--m2-accent-2) !important;
+	font-family: var(--m2-font-mono) !important;
+	font-size: 11px !important;
+	line-height: 1.5 !important;
+	white-space: pre-wrap !important;
+	word-break: break-word;
+}
+
+/* ============================================================================
+   RESPONSIVE / A11Y / PRINT
+   ============================================================================ */
+@media (max-width: 900px) {
+	:root { --m2-panel-width: 312px; --m2-hud-gap: 8px; }
+	.mat2-demo-panel div[style*="grid-template-columns"] { grid-template-columns: 92px 1fr 44px !important; }
+	.mat2-amount-row, .mat2-mult-row { grid-template-columns: 66px 1fr 40px !important; }
+}
+
+@media (max-width: 640px) {
+	.mat2-demo-panel,
+	body > div[style*="fixed"]:not(#debug-panel):not(#boot-status) {
+		top: auto !important;
+		bottom: var(--m2-hud-gap) !important;
+		left: var(--m2-hud-gap) !important;
+		right: var(--m2-hud-gap) !important;
+		width: auto !important;
+		max-height: 46vh !important;
+		border-radius: var(--m2-radius-md) !important;
+	}
+	#mat2-demo-canvas { cursor: default; }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+	.mat2-demo-panel { max-height: calc(100vh - 16px) !important; }
+	.mat2-demo-panel pre { max-height: 110px; overflow: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+
+@media print {
+	html, body, #app { overflow: visible; background: white; color: black; }
+	.mat2-demo-panel { display: none !important; }
+	canvas { width: 100%; height: auto; }
+}

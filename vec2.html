@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+	<meta name="color-scheme" content="dark" />
+	<meta name="description" content="Native browser host for 002_vec2_demo.js — Three.js r185 + custom gl-matrix math with full debug system." />
+	<title>002 Vec2 Demo — Debug Host</title>
+
+	<!-- Demo stylesheet -->
+	<link rel="stylesheet" href="./002_vec2_demo.css" />
+
+	<style>
+		:root {
+			--dbg-bg: rgba(8, 10, 14, 0.96);
+			--dbg-border: rgba(255, 255, 255, 0.09);
+			--dbg-text: #c8d4e0;
+			--dbg-accent: #35c8ff;
+			--dbg-error: #ff5d73;
+			--dbg-warn: #ffb347;
+			--dbg-ok: #4ade80;
+			--dbg-info: #7cc4ff;
+			--dbg-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+		}
+
+		html, body {
+			margin: 0;
+			padding: 0;
+			width: 100%;
+			height: 100%;
+			overflow: hidden;
+			background: #060a0f;
+			color: #e8f0f8;
+			font-family: system-ui, -apple-system, sans-serif;
+		}
+
+		#app {
+			position: relative;
+			width: 100%;
+			height: 100%;
+			isolation: isolate;
+		}
+
+		#vec2-canvas {
+			position: absolute;
+			inset: 0;
+			width: 100%;
+			height: 100%;
+			display: block;
+			touch-action: none;
+			outline: none;
+		}
+
+		#debug-panel {
+			position: fixed;
+			bottom: 0;
+			left: 0;
+			right: 0;
+			z-index: 99999;
+			max-height: 45vh;
+			display: flex;
+			flex-direction: column;
+			background: var(--dbg-bg);
+			border-top: 1px solid var(--dbg-border);
+			backdrop-filter: blur(12px);
+			transition: transform 200ms ease;
+			font-family: var(--dbg-mono);
+			font-size: 12px;
+		}
+
+		#debug-panel.collapsed {
+			transform: translateY(calc(100% - 36px));
+		}
+
+		#debug-header {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 6px 12px;
+			min-height: 36px;
+			background: rgba(255, 255, 255, 0.03);
+			border-bottom: 1px solid var(--dbg-border);
+			cursor: pointer;
+			user-select: none;
+			flex-shrink: 0;
+		}
+
+		#debug-header:hover {
+			background: rgba(255, 255, 255, 0.06);
+		}
+
+		#debug-title {
+			font-weight: 700;
+			font-size: 12px;
+			color: var(--dbg-accent);
+			letter-spacing: 0.04em;
+		}
+
+		#debug-count {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			min-width: 20px;
+			height: 20px;
+			padding: 0 6px;
+			border-radius: 10px;
+			background: var(--dbg-error);
+			color: #fff;
+			font-size: 11px;
+			font-weight: 700;
+		}
+
+		#debug-count.zero {
+			background: var(--dbg-ok);
+		}
+
+		.debug-btn {
+			appearance: none;
+			border: 1px solid var(--dbg-border);
+			border-radius: 4px;
+			background: rgba(255, 255, 255, 0.06);
+			color: var(--dbg-text);
+			font-size: 11px;
+			font-family: var(--dbg-mono);
+			padding: 4px 10px;
+			cursor: pointer;
+			transition: background 100ms;
+		}
+
+		.debug-btn:hover {
+			background: rgba(255, 255, 255, 0.12);
+		}
+
+		.debug-btn.primary {
+			border-color: rgba(53, 200, 255, 0.4);
+			background: rgba(53, 200, 255, 0.12);
+			color: var(--dbg-accent);
+		}
+
+		.debug-btn.danger {
+			border-color: rgba(255, 93, 115, 0.4);
+			background: rgba(255, 93, 115, 0.10);
+			color: var(--dbg-error);
+		}
+
+		#debug-actions {
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			margin-left: auto;
+		}
+
+		#debug-log {
+			flex: 1;
+			overflow-y: auto;
+			padding: 8px 12px;
+			scrollbar-width: thin;
+			scrollbar-color: rgba(255,255,255,0.15) transparent;
+		}
+
+		#debug-log::-webkit-scrollbar {
+			width: 6px;
+		}
+
+		#debug-log::-webkit-scrollbar-thumb {
+			background: rgba(255, 255, 255, 0.15);
+			border-radius: 3px;
+		}
+
+		.dbg-entry {
+			display: flex;
+			gap: 8px;
+			padding: 4px 0;
+			border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+			line-height: 1.4;
+			word-break: break-word;
+		}
+
+		.dbg-entry:last-child {
+			border-bottom: none;
+		}
+
+		.dbg-time {
+			color: rgba(255, 255, 255, 0.35);
+			white-space: nowrap;
+			flex-shrink: 0;
+		}
+
+		.dbg-type {
+			font-weight: 700;
+			white-space: nowrap;
+			flex-shrink: 0;
+			text-transform: uppercase;
+			font-size: 10px;
+			padding: 1px 5px;
+			border-radius: 3px;
+		}
+
+		.dbg-type.error { background: rgba(255,93,115,0.15); color: var(--dbg-error); }
+		.dbg-type.warn { background: rgba(255,179,71,0.15); color: var(--dbg-warn); }
+		.dbg-type.info { background: rgba(124,196,255,0.12); color: var(--dbg-info); }
+		.dbg-type.log { background: rgba(255,255,255,0.06); color: var(--dbg-text); }
+		.dbg-type.unhandled { background: rgba(255,93,115,0.2); color: #ff8fa0; }
+
+		.dbg-msg {
+			color: var(--dbg-text);
+			flex: 1;
+			min-width: 0;
+		}
+
+		.dbg-msg .stack {
+			display: block;
+			margin-top: 3px;
+			color: rgba(255, 255, 255, 0.3);
+			font-size: 10px;
+			white-space: pre-wrap;
+		}
+
+		#debug-empty {
+			padding: 16px;
+			text-align: center;
+			color: rgba(255, 255, 255, 0.3);
+			font-style: italic;
+		}
+
+		#copy-toast {
+			position: fixed;
+			top: 16px;
+			left: 50%;
+			transform: translateX(-50%) translateY(-60px);
+			background: var(--dbg-ok);
+			color: #000;
+			padding: 8px 20px;
+			border-radius: 6px;
+			font-weight: 700;
+			font-size: 13px;
+			z-index: 100000;
+			transition: transform 250ms ease;
+			pointer-events: none;
+		}
+
+		#copy-toast.show {
+			transform: translateX(-50%) translateY(0);
+		}
+
+		#boot-status {
+			position: fixed;
+			top: 12px;
+			left: 12px;
+			z-index: 99998;
+			max-width: min(92vw, 480px);
+			padding: 10px 14px;
+			border: 1px solid var(--dbg-border);
+			border-radius: 8px;
+			background: var(--dbg-bg);
+			backdrop-filter: blur(10px);
+			color: var(--dbg-text);
+			font: 12px/1.5 var(--dbg-mono);
+			white-space: pre-wrap;
+			word-break: break-word;
+			transition: opacity 300ms;
+		}
+
+		#boot-status.ready { color: var(--dbg-ok); border-color: rgba(74,222,128,0.4); }
+		#boot-status.error { color: var(--dbg-error); border-color: rgba(255,93,115,0.4); }
+	</style>
+</head>
+
+<body>
+	<noscript style="display:grid;place-items:center;height:100vh;color:#ff5d73;font-size:16px;text-align:center;padding:24px;">
+		This demo requires JavaScript and native ES module support.
+	</noscript>
+
+	<div id="app">
+		<canvas id="vec2-canvas" tabindex="0" aria-label="Vec2 demonstration canvas"></canvas>
+	</div>
+
+	<div id="boot-status" role="status" aria-live="polite">Initializing debug host…</div>
+
+	<div id="copy-toast">Copied to clipboard</div>
+
+	<!-- ================================================================
+	     DEBUG PANEL
+	     ================================================================ -->
+	<div id="debug-panel">
+		<div id="debug-header" title="Click to toggle">
+			<span id="debug-title">DEBUG CONSOLE</span>
+			<span id="debug-count" class="zero">0</span>
+			<div id="debug-actions">
+				<button class="debug-btn primary" id="btn-copy" title="Copy all logs to clipboard">Copy All</button>
+				<button class="debug-btn" id="btn-copy-errors" title="Copy only errors">Errors Only</button>
+				<button class="debug-btn danger" id="btn-clear" title="Clear all logs">Clear</button>
+				<button class="debug-btn" id="btn-toggle" title="Toggle panel">v</button>
+			</div>
+		</div>
+		<div id="debug-log">
+			<div id="debug-empty">No messages captured yet.</div>
+		</div>
+	</div>
+
+	<!-- ================================================================
+	     THREE.JS r185 IMPORT MAP
+	     ================================================================ -->
+	<script type="importmap">
+	{
+		"imports": {
+			"three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+			"three/": "https://cdn.jsdelivr.net/npm/three@0.185.0/",
+			"three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.webgpu.js",
+			"three/tsl": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.tsl.js",
+			"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/",
+			"three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
+		}
+	}
+	</script>
+
+	<!-- ================================================================
+	     DEBUG SYSTEM — catches ALL errors before any module loads
+	     NO await used. Pure ES5-compatible logic inside a classic script.
+	     ================================================================ -->
+	<script>
+	(function () {
+		"use strict";
+
+		var entries = [];
+		var maxEntries = 500;
+		var logContainer = null;
+		var countBadge = null;
+		var emptyMsg = null;
+
+		function getTime() {
+			var d = new Date();
+			var ms = String(d.getMilliseconds());
+			while (ms.length < 3) { ms = "0" + ms; }
+			return d.toLocaleTimeString("en-US", { hour12: false }) + "." + ms;
+		}
+
+		function escapeHtml(str) {
+			return String(str)
+				.replace(/&/g, "&amp;")
+				.replace(/</g, "&lt;")
+				.replace(/>/g, "&gt;");
+		}
+
+		function formatStack(stack) {
+			if (!stack) { return ""; }
+			return String(stack).split("\n").slice(0, 6).join("\n");
+		}
+
+		function updateCount() {
+			if (!countBadge) { return; }
+			var errCount = 0;
+			for (var i = 0; i < entries.length; i++) {
+				if (entries[i].type === "error" || entries[i].type === "unhandled") {
+					errCount++;
+				}
+			}
+			countBadge.textContent = String(errCount);
+			countBadge.className = errCount === 0 ? "zero" : "";
+		}
+
+		function renderEntry(entry) {
+			if (!logContainer) { return; }
+			if (emptyMsg && emptyMsg.parentNode) {
+				emptyMsg.parentNode.removeChild(emptyMsg);
+				emptyMsg = null;
+			}
+			var div = document.createElement("div");
+			div.className = "dbg-entry";
+
+			var stackHtml = entry.stack
+				? '<span class="stack">' + escapeHtml(entry.stack) + "</span>"
+				: "";
+
+			div.innerHTML =
+				'<span class="dbg-time">' + entry.time + "</span>" +
+				'<span class="dbg-type ' + entry.type + '">' + entry.type + "</span>" +
+				'<span class="dbg-msg">' + escapeHtml(entry.message) + stackHtml + "</span>";
+
+			logContainer.appendChild(div);
+			logContainer.scrollTop = logContainer.scrollHeight;
+		}
+
+		function addEntry(type, message, stack) {
+			var entry = {
+				time: getTime(),
+				type: type,
+				message: String(message),
+				stack: stack || ""
+			};
+			entries.push(entry);
+			if (entries.length > maxEntries) { entries.shift(); }
+			renderEntry(entry);
+			updateCount();
+		}
+
+		function buildCopyText(filterType) {
+			var filtered = [];
+			for (var i = 0; i < entries.length; i++) {
+				if (!filterType || entries[i].type === filterType || entries[i].type === "unhandled") {
+					filtered.push(entries[i]);
+				}
+			}
+			if (filtered.length === 0) { return "[No entries]"; }
+
+			var lines = [];
+			for (var j = 0; j < filtered.length; j++) {
+				var e = filtered[j];
+				var line = "[" + e.time + "] [" + e.type.toUpperCase() + "] " + e.message;
+				if (e.stack) {
+					line += "\n  STACK:\n  " + e.stack.replace(/\n/g, "\n  ");
+				}
+				lines.push(line);
+			}
+
+			return "=== DEBUG LOG (" + filtered.length + " entries) ===\n" +
+				"=== Timestamp: " + new Date().toISOString() + " ===\n" +
+				"=== UA: " + navigator.userAgent + " ===\n\n" +
+				lines.join("\n\n");
+		}
+
+		function showToast() {
+			var toast = document.getElementById("copy-toast");
+			if (!toast) { return; }
+			toast.classList.add("show");
+			setTimeout(function () {
+				toast.classList.remove("show");
+			}, 1800);
+		}
+
+		function fallbackCopy(text) {
+			var ta = document.createElement("textarea");
+			ta.value = text;
+			ta.style.cssText = "position:fixed;left:-9999px;top:-9999px;";
+			document.body.appendChild(ta);
+			ta.select();
+			try {
+				document.execCommand("copy");
+				showToast();
+			} catch (e) {
+				/* silent */
+			}
+			document.body.removeChild(ta);
+		}
+
+		function copyToClipboard(text) {
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				navigator.clipboard.writeText(text).then(showToast, function () {
+					fallbackCopy(text);
+				});
+			} else {
+				fallbackCopy(text);
+			}
+		}
+
+		// ---- Global Error Handlers ----
+		window.onerror = function (message, source, lineno, colno, error) {
+			var stack = (error && error.stack)
+				? formatStack(error.stack)
+				: (source + ":" + lineno + ":" + colno);
+			addEntry("error", message, stack);
+			return false;
+		};
+
+		window.addEventListener("unhandledrejection", function (event) {
+			var reason = event.reason;
+			var msg = (reason && reason.message) ? reason.message : String(reason);
+			var stack = (reason && reason.stack) ? formatStack(reason.stack) : "";
+			addEntry("unhandled", "Unhandled Promise Rejection: " + msg, stack);
+		});
+
+		window.addEventListener("error", function (event) {
+			var t = event.target;
+			if (t && (t.tagName === "SCRIPT" || t.tagName === "LINK")) {
+				addEntry("error", "Resource failed to load: " + (t.src || t.href), "");
+			}
+		}, true);
+
+		// ---- Intercept console methods ----
+		var origLog = console.log;
+		var origWarn = console.warn;
+		var origError = console.error;
+		var origInfo = console.info;
+
+		function argsToString(args) {
+			var parts = [];
+			for (var i = 0; i < args.length; i++) {
+				parts.push(String(args[i]));
+			}
+			return parts.join(" ");
+		}
+
+		console.log = function () {
+			origLog.apply(console, arguments);
+			addEntry("log", argsToString(arguments));
+		};
+
+		console.warn = function () {
+			origWarn.apply(console, arguments);
+			addEntry("warn", argsToString(arguments));
+		};
+
+		console.error = function () {
+			origError.apply(console, arguments);
+			var parts = [];
+			for (var i = 0; i < arguments.length; i++) {
+				var a = arguments[i];
+				if (a && a.stack) {
+					parts.push(a.message + "\n" + a.stack);
+				} else {
+					parts.push(String(a));
+				}
+			}
+			addEntry("error", parts.join(" "));
+		};
+
+		console.info = function () {
+			origInfo.apply(console, arguments);
+			addEntry("info", argsToString(arguments));
+		};
+
+		// ---- Initialize DOM references ----
+		function initDebugUI() {
+			logContainer = document.getElementById("debug-log");
+			countBadge = document.getElementById("debug-count");
+			emptyMsg = document.getElementById("debug-empty");
+
+			var panel = document.getElementById("debug-panel");
+			var header = document.getElementById("debug-header");
+			var btnToggle = document.getElementById("btn-toggle");
+
+			header.addEventListener("click", function (e) {
+				if (e.target && e.target.closest && e.target.closest("button")) { return; }
+				panel.classList.toggle("collapsed");
+				btnToggle.textContent = panel.classList.contains("collapsed") ? "^" : "v";
+			});
+
+			btnToggle.addEventListener("click", function () {
+				panel.classList.toggle("collapsed");
+				btnToggle.textContent = panel.classList.contains("collapsed") ? "^" : "v";
+			});
+
+			document.getElementById("btn-copy").addEventListener("click", function () {
+				copyToClipboard(buildCopyText(null));
+			});
+
+			document.getElementById("btn-copy-errors").addEventListener("click", function () {
+				copyToClipboard(buildCopyText("error"));
+			});
+
+			document.getElementById("btn-clear").addEventListener("click", function () {
+				entries.length = 0;
+				if (logContainer) {
+					logContainer.innerHTML = '<div id="debug-empty">No messages captured yet.</div>';
+					emptyMsg = document.getElementById("debug-empty");
+				}
+				updateCount();
+			});
+
+			addEntry("info", "Debug system initialized. Awaiting module load…");
+		}
+
+		if (document.readyState === "loading") {
+			document.addEventListener("DOMContentLoaded", initDebugUI);
+		} else {
+			initDebugUI();
+		}
+
+		window.__DEBUG__ = {
+			getEntries: function () { return entries.slice(); },
+			addEntry: addEntry,
+			clear: function () { entries.length = 0; },
+			copyAll: function () { copyToClipboard(buildCopyText(null)); },
+			copyErrors: function () { copyToClipboard(buildCopyText("error")); }
+		};
+	})();
+	</script>
+
+	<!-- ================================================================
+	     MODULE LOADER — NO await. Uses promise chains (.then / .catch).
+	     ================================================================ -->
+	<script type="module">
+		var statusEl = document.getElementById("boot-status");
+
+		function setStatus(msg, kind) {
+			if (!statusEl) { return; }
+			statusEl.textContent = msg;
+			statusEl.className = kind || "";
+		}
+
+		function hideStatus(delay) {
+			setTimeout(function () {
+				if (!statusEl) { return; }
+				statusEl.style.opacity = "0";
+				setTimeout(function () {
+					if (statusEl && statusEl.parentNode) {
+						statusEl.parentNode.removeChild(statusEl);
+					}
+					statusEl = null;
+				}, 350);
+			}, delay || 1200);
+		}
+
+		globalThis.__VEC2_DEMO_HOST__ = {
+			version: "native-browser-r185-debug",
+			buildTooling: "none",
+			framework: "none",
+			mathProvider: "custom-gl-matrix-compatible",
+			container: document.getElementById("app"),
+			canvas: document.getElementById("vec2-canvas"),
+			started: false
+		};
+
+		setStatus("Loading ./002_vec2_demo.js …");
+
+		import("./002_vec2_demo.js")
+			.then(function (moduleRef) {
+				setStatus("002_vec2_demo.js loaded successfully.", "ready");
+				var keys = moduleRef ? Object.keys(moduleRef).join(", ") : "(none)";
+				console.info("[HOST] Module loaded. Exports: " + keys);
+				hideStatus(1500);
+			})
+			.catch(function (err) {
+				console.error("[HOST] Fatal load error:", err);
+				var msg = (err && err.message) ? err.message : String(err);
+				setStatus("FAILED:\n" + msg, "error");
+			});
+	</script>
+</body>
+</html>

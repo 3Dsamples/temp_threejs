@@ -1,0 +1,595 @@
+/* ============================================================================
+// File number : 006-D.CSS  (stylesheet companion to 006_mat3_demo.js)
+// Full path name : src/006_mat3_demo.css
+// Description : Complete themed stylesheet for the MAT3 · CUBE LAB shell and
+//               all three examples (EX·01 TBN Forge / EX·02 Orbital Swarm /
+//               EX·03 Kinetic Chain). Covers: design tokens, fixed shell
+//               layout, example tabs with per-demo accent (--ac), HUD chips +
+//               sparkline, canvas quick actions, permanent control panel with
+//               themed scrollbars, spectrum "amount" sliders (auto-detected
+//               from aria-label *count*), premium native drop-down menus
+//               (dark color-scheme popup) plus an optional no-JS custom
+//               drop-down (.m3d-dd), switches, segmented controls, buttons,
+//               color wells, toasts, shortcut popover, loading overlay with
+//               3D cube, focus-visible / reduced-motion / forced-colors /
+//               coarse-pointer accessibility, and Android-first responsive
+//               layout (portrait bottom panel, landscape side panel).
+//               Selectors carry an `html` ancestor (+0,0,1 specificity) so
+//               this file wins over the module's injected <style> without
+//               any JavaScript modification. Inline dynamic values (--ac,
+//               --fill, opacity) set by the module are respected.
+// Best for : 3d graphics UI -- real-time WebGL tooling on Android 64-bit,
+//            high-density control panels for 1M-instance demos, GPU-friendly
+//            compositor-only animations (transform/opacity), zero layout
+//            thrash, tabular-numeric readouts, themeable accent pipeline.
+// License : MIT
+//
+// TOPOLOGICAL ORDER (dependencies first):
+//   001 src/math/002_vec2.js   005 src/math/006_mat3.js
+//   002 src/math/003_vec3.js   006 src/math/007_mat4.js
+//   003 src/math/004_vec4.js   007 src/math/008_quat.js
+//   004 src/math/005_mat2.js   008 src/math/009_quat2.js
+//   009 src/006_mat3_demo.js   (DOM contract — ids/classes mirrored 1:1)
+//   010 src/006_mat3_demo.css  <-- this file
+//
+// HOST (no build step; any http origin or Android WebView):
+//   <link rel="stylesheet" href="./006_mat3_demo.css">
+//   <script type="module" src="./006_mat3_demo.js"></script>
+// ========================================================================== */
+
+/* ==========================================================================
+   01 · DESIGN TOKENS
+   ========================================================================== */
+html #m3d-root{
+  --bg0:#05070f; --bg1:#0a1022; --surface:#0d1530; --surface2:#111c3d;
+  --line:#1d2b55; --line2:#2a3d78;
+  --cyan:#3fd6ff; --blue:#4f7dff; --magenta:#ff3d9e; --amber:#ffb02e;
+  --green:#43f5a0; --red:#ff5470; --violet:#8b5cff;
+  --text:#e9eeff; --muted:#93a0c8; --dim:#5b6890;
+  --ac:var(--cyan);                       /* per-demo / per-section accent   */
+  --grad-primary:linear-gradient(120deg,var(--cyan),var(--blue) 55%,var(--magenta));
+  --grad-amount:linear-gradient(90deg,var(--cyan),var(--blue) 38%,var(--magenta) 72%,var(--amber));
+  --font-ui:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+  --font-mono:ui-monospace,"Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+  --r-sm:8px; --r-md:10px; --r-lg:12px;
+  --ring:0 0 0 2px var(--bg0),0 0 0 4px var(--amber);
+  color-scheme:dark;                      /* dark native drop-down popup     */
+}
+
+/* ==========================================================================
+   02 · BASE / RESET (scoped — never leaks into the host page)
+   ========================================================================== */
+html #m3d-root, html #m3d-root *{box-sizing:border-box;margin:0;padding:0}
+html #m3d-root{
+  position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;
+  background:radial-gradient(120% 90% at 70% -10%,#101a3d 0%,var(--bg1) 42%,var(--bg0) 100%);
+  color:var(--text);font-family:var(--font-ui);font-size:14px;line-height:1.4;
+  overflow:hidden;-webkit-tap-highlight-color:transparent;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+html #m3d-root button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+html #m3d-root .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+html #m3d-root :is(button,input,select,summary,a):focus-visible{
+  outline:none;box-shadow:var(--ring);border-radius:var(--r-sm);
+}
+html #m3d-root ::selection{background:rgba(63,214,255,.28);color:var(--text)}
+
+/* ==========================================================================
+   03 · TOP BAR
+   ========================================================================== */
+html #m3d-top{
+  flex:0 0 56px;display:flex;align-items:center;gap:14px;padding:0 16px;
+  background:linear-gradient(90deg,rgba(13,21,48,.94),rgba(10,16,34,.9));
+  border-bottom:1px solid var(--line);
+  backdrop-filter:blur(12px) saturate(1.4);-webkit-backdrop-filter:blur(12px) saturate(1.4);
+  position:relative;z-index:5;
+}
+html #m3d-logo{width:26px;height:26px;perspective:120px;flex:0 0 auto}
+html #m3d-logo .c{width:100%;height:100%;position:relative;transform-style:preserve-3d;
+  animation:m3dspin 9s linear infinite;will-change:transform}
+html #m3d-logo .f{position:absolute;inset:3px;border:1.5px solid var(--cyan);border-radius:2px;
+  background:linear-gradient(135deg,rgba(63,214,255,.22),rgba(255,61,158,.16))}
+html #m3d-logo .f:nth-child(1){transform:translateZ(10px)}
+html #m3d-logo .f:nth-child(2){transform:rotateY(90deg) translateZ(10px);border-color:var(--magenta)}
+html #m3d-logo .f:nth-child(3){transform:rotateX(90deg) translateZ(10px);border-color:var(--amber)}
+html #m3d-title{
+  font-weight:700;letter-spacing:.14em;font-size:15px;white-space:nowrap;
+  background:linear-gradient(90deg,var(--cyan),var(--blue) 55%,var(--magenta));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+html #m3d-sub{color:var(--dim);font-size:11px;letter-spacing:.08em;white-space:nowrap}
+html #m3d-top .sp{flex:1}
+html .m3d-tbtn{
+  display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:9px;
+  border:1px solid var(--line2);background:rgba(17,28,61,.7);color:var(--muted);
+  font-size:12px;letter-spacing:.05em;user-select:none;
+  transition:border-color .18s,color .18s,box-shadow .18s;
+}
+html .m3d-tbtn:hover{border-color:var(--cyan);color:var(--text);box-shadow:0 0 14px rgba(63,214,255,.25)}
+html .m3d-tbtn[aria-pressed="true"]{border-color:var(--green);color:var(--green)}
+html .m3d-tbtn svg{width:15px;height:15px;fill:currentColor;flex:0 0 auto}
+
+/* ==========================================================================
+   04 · EXAMPLE TABS (EX·01 / EX·02 / EX·03)
+   ========================================================================== */
+html #m3d-tabs{
+  flex:0 0 auto;display:flex;gap:10px;padding:10px 16px;overflow-x:auto;
+  background:rgba(8,12,26,.6);border-bottom:1px solid var(--line);
+  scrollbar-width:thin;scrollbar-color:var(--line2) transparent;
+  overscroll-behavior-x:contain;position:relative;z-index:4;
+}
+html #m3d-tabs::-webkit-scrollbar{height:6px}
+html #m3d-tabs::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
+html .m3d-tab{
+  flex:1 1 0;min-width:210px;text-align:left;padding:9px 13px;border-radius:11px;
+  border:1px solid var(--line);position:relative;overflow:hidden;user-select:none;
+  background:linear-gradient(160deg,rgba(17,28,61,.55),rgba(10,16,34,.55));
+  transition:transform .18s,border-color .18s,box-shadow .18s;
+}
+html .m3d-tab:hover{transform:translateY(-1px);border-color:var(--line2)}
+html .m3d-tab .n{font-size:10px;letter-spacing:.22em;color:var(--dim)}
+html .m3d-tab .t{font-weight:700;font-size:13.5px;letter-spacing:.06em;margin:1px 0;color:var(--text)}
+html .m3d-tab .d{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html .m3d-tab[aria-selected="true"]{
+  border-color:var(--ac);
+  box-shadow:0 0 0 1px var(--ac),0 6px 22px -6px var(--ac);
+}
+html .m3d-tab[aria-selected="true"] .n{color:var(--ac)}
+html .m3d-tab[aria-selected="true"]::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(120deg,transparent 30%,
+    color-mix(in srgb,var(--ac) 14%,transparent) 50%,transparent 70%);
+}
+
+/* ==========================================================================
+   05 · MAIN / STAGE / CANVAS
+   ========================================================================== */
+html #m3d-main{flex:1;display:flex;min-height:0;position:relative}
+html #m3d-stage{flex:1;position:relative;min-width:0;min-height:0;background:var(--bg0)}
+html #m3d-canvas{
+  position:absolute;inset:0;width:100%;height:100%;display:block;
+  touch-action:none;outline:none;cursor:grab;
+}
+html #m3d-canvas:active{cursor:grabbing}
+
+/* ==========================================================================
+   06 · HUD / QUICK ACTIONS / HINT / SCALE / PROGRESS
+   ========================================================================== */
+html #m3d-hud{
+  position:absolute;top:10px;left:12px;display:flex;flex-wrap:wrap;gap:6px;
+  pointer-events:none;z-index:3;max-width:calc(100% - 130px);
+}
+html .m3d-chip{
+  display:flex;align-items:center;gap:6px;padding:4px 9px;border-radius:8px;
+  background:rgba(8,13,29,.72);border:1px solid var(--line);
+  font-size:11px;color:var(--muted);contain:layout style;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+}
+html .m3d-chip b{color:var(--cyan);font-weight:600;font-variant-numeric:tabular-nums}
+html .m3d-chip.warn b{color:var(--amber)}
+html #m3d-spark{width:96px;height:24px;display:block}
+html #m3d-quick{position:absolute;top:10px;right:12px;display:flex;gap:7px;z-index:3}
+html .m3d-qbtn{
+  width:36px;height:36px;border-radius:10px;border:1px solid var(--line2);
+  background:rgba(13,21,48,.8);color:var(--muted);
+  display:flex;align-items:center;justify-content:center;transition:all .16s;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+}
+html .m3d-qbtn:hover{color:var(--cyan);border-color:var(--cyan);box-shadow:0 0 12px rgba(63,214,255,.3)}
+html .m3d-qbtn:active{transform:scale(.94)}
+html .m3d-qbtn svg{width:16px;height:16px;fill:currentColor}
+html .m3d-qbtn[aria-pressed="true"]{color:var(--amber);border-color:var(--amber)}
+html #m3d-hint{
+  position:absolute;left:12px;bottom:12px;z-index:3;padding:7px 12px;border-radius:9px;
+  background:rgba(8,13,29,.78);border:1px solid var(--line);color:var(--muted);
+  font-size:11.5px;pointer-events:none;transition:opacity .8s;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+}
+html #m3d-scale{
+  position:absolute;right:12px;bottom:12px;z-index:3;padding:8px 12px;border-radius:10px;
+  background:rgba(8,13,29,.8);border:1px solid var(--amber);color:var(--text);
+  font-size:11.5px;pointer-events:none;display:none;text-align:right;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  box-shadow:0 0 22px -8px var(--amber);
+}
+html #m3d-scale b{color:var(--amber)}
+html #m3d-prog{
+  position:absolute;top:56px;left:50%;transform:translateX(-50%);z-index:8;
+  padding:5px 14px;border-radius:8px;background:rgba(9,14,30,.9);
+  border:1px solid var(--cyan);color:var(--cyan);font-size:11px;
+  display:none;pointer-events:none;
+}
+
+/* ==========================================================================
+   07 · CONTROL PANEL SHELL + THEMED SCROLLBARS
+   ========================================================================== */
+html #m3d-panel{
+  flex:0 0 358px;display:flex;flex-direction:column;min-height:0;position:relative;z-index:4;
+  background:linear-gradient(180deg,rgba(13,21,48,.96),rgba(9,14,30,.96));
+  border-left:1px solid var(--line);
+}
+html #m3d-panel::before{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background-image:radial-gradient(rgba(63,214,255,.05) 1px,transparent 1px);
+  background-size:22px 22px;
+}
+html #m3d-pscroll{
+  flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 16px 20px;position:relative;
+  scrollbar-width:thin;scrollbar-color:var(--cyan) var(--bg1);
+  touch-action:pan-y;overscroll-behavior:contain;
+}
+html #m3d-pscroll::-webkit-scrollbar{width:10px}
+html #m3d-pscroll::-webkit-scrollbar-track{
+  background:linear-gradient(180deg,var(--bg1),var(--surface));border-radius:5px}
+html #m3d-pscroll::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg,var(--cyan),var(--blue));
+  border-radius:5px;border:2px solid var(--bg1)}
+html #m3d-pscroll::-webkit-scrollbar-thumb:hover{
+  background:linear-gradient(180deg,var(--magenta),var(--cyan))}
+html #m3d-foot{
+  flex:0 0 auto;padding:8px 16px;border-top:1px solid var(--line);font-size:10px;
+  color:var(--dim);letter-spacing:.08em;display:flex;justify-content:space-between;gap:8px;
+}
+
+/* ==========================================================================
+   08 · SECTIONS
+   ========================================================================== */
+html .m3d-sec{
+  margin-bottom:16px;border:1px solid var(--line);border-radius:var(--r-lg);
+  overflow:hidden;background:rgba(10,16,34,.55);
+}
+html .m3d-sec>h3{
+  display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:10.5px;
+  letter-spacing:.24em;color:var(--ac);border-bottom:1px solid var(--line);
+  background:linear-gradient(90deg,color-mix(in srgb,var(--ac) 10%,transparent),transparent);
+}
+html .m3d-sec>h3::before{
+  content:"";width:7px;height:7px;border-radius:2px;background:var(--ac);
+  box-shadow:0 0 8px var(--ac);flex:0 0 auto;
+}
+html .m3d-sec .body{padding:10px 12px;display:flex;flex-direction:column;gap:10px}
+
+/* ==========================================================================
+   09 · CONTROL ROWS / LABELS / READOUTS
+   ========================================================================== */
+html .m3d-row{display:flex;flex-direction:column;gap:4px}
+html .m3d-row .lab{
+  display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  font-size:11.5px;color:var(--muted);user-select:none;
+}
+html .m3d-row .lab output{
+  color:var(--ac);font-size:11px;font-family:var(--font-mono);
+  font-variant-numeric:tabular-nums;min-width:52px;text-align:right;
+}
+
+/* ==========================================================================
+   10 · SLIDERS — STANDARD
+   ========================================================================== */
+html .m3d-row input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:22px;
+  background:transparent;cursor:pointer;--fill:50%;
+}
+html .m3d-row input[type=range]::-webkit-slider-runnable-track{
+  height:5px;border-radius:3px;
+  background:linear-gradient(90deg,var(--ac) var(--fill),var(--line) var(--fill));
+}
+html .m3d-row input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:15px;height:15px;margin-top:-5px;border-radius:50%;
+  background:var(--text);border:2px solid var(--ac);
+  box-shadow:0 0 8px rgba(63,214,255,.45);
+  box-shadow:0 0 8px color-mix(in srgb,var(--ac) 60%,transparent);
+  transition:transform .12s;
+}
+html .m3d-row input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2)}
+html .m3d-row input[type=range]:active::-webkit-slider-thumb{transform:scale(1.05)}
+html .m3d-row input[type=range]::-moz-range-track{height:5px;border-radius:3px;background:var(--line)}
+html .m3d-row input[type=range]::-moz-range-progress{height:5px;border-radius:3px;background:var(--ac)}
+html .m3d-row input[type=range]::-moz-range-thumb{
+  width:13px;height:13px;border-radius:50%;background:var(--text);border:2px solid var(--ac)}
+
+/* ==========================================================================
+   11 · SLIDERS — "AMOUNT" (Cube / Body / Follower count, auto-detected)
+   Spectrum track + tick marks + halo thumb. Also available explicitly via
+   .m3d-row--amount for any future count-like parameter.
+   ========================================================================== */
+html .m3d-row input[type=range][aria-label*="count" i],
+html .m3d-row--amount input[type=range]{height:30px}
+html .m3d-row input[type=range][aria-label*="count" i]::-webkit-slider-runnable-track,
+html .m3d-row--amount input[type=range]::-webkit-slider-runnable-track{
+  height:8px;border-radius:4px;
+  background:
+    linear-gradient(90deg,transparent 0 var(--fill),var(--line) var(--fill) 100%),
+    repeating-linear-gradient(90deg,rgba(233,238,255,.16) 0 1px,transparent 1px 10%),
+    var(--grad-amount);
+  box-shadow:inset 0 0 0 1px rgba(63,214,255,.14),0 0 12px -4px var(--ac);
+}
+html .m3d-row input[type=range][aria-label*="count" i]::-webkit-slider-thumb,
+html .m3d-row--amount input[type=range]::-webkit-slider-thumb{
+  width:22px;height:22px;margin-top:-7px;
+  background:radial-gradient(circle at 35% 32%,#ffffff,#cfe8ff 70%);
+  border:2px solid var(--ac);
+  box-shadow:0 0 0 4px rgba(63,214,255,.16),0 0 16px rgba(63,214,255,.5);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--ac) 22%,transparent),
+             0 0 16px color-mix(in srgb,var(--ac) 65%,transparent);
+}
+html .m3d-row input[type=range][aria-label*="count" i]::-webkit-slider-thumb:hover,
+html .m3d-row--amount input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.14)}
+html .m3d-row input[type=range][aria-label*="count" i]::-moz-range-track,
+html .m3d-row--amount input[type=range]::-moz-range-track{height:8px;border-radius:4px;background:var(--line)}
+html .m3d-row input[type=range][aria-label*="count" i]::-moz-range-progress,
+html .m3d-row--amount input[type=range]::-moz-range-progress{
+  height:8px;border-radius:4px;background:var(--grad-amount)}
+html .m3d-row input[type=range][aria-label*="count" i]::-moz-range-thumb,
+html .m3d-row--amount input[type=range]::-moz-range-thumb{
+  width:20px;height:20px;background:radial-gradient(circle at 35% 32%,#ffffff,#cfe8ff 70%);
+  border:2px solid var(--ac);box-shadow:0 0 14px var(--ac)}
+@supports selector(:has(*)){
+  html .m3d-row:has(input[type=range][aria-label*="count" i]) .lab>span,
+  html .m3d-row--amount .lab>span{
+    text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--text)}
+  html .m3d-row:has(input[type=range][aria-label*="count" i]) .lab output,
+  html .m3d-row--amount .lab output{
+    font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px;
+    background:rgba(63,214,255,.1);
+    background:color-mix(in srgb,var(--ac) 12%,transparent);
+    border:1px solid color-mix(in srgb,var(--ac) 35%,transparent);
+  }
+}
+
+/* ==========================================================================
+   12 · DROP-DOWN MENU — NATIVE SELECT (dark popup via color-scheme)
+   ========================================================================== */
+html .m3d-row select{
+  width:100%;height:36px;padding:7px 34px 7px 11px;border-radius:var(--r-md);
+  border:1px solid var(--line2);color:var(--text);font-size:12px;font-family:var(--font-ui);
+  -webkit-appearance:none;appearance:none;cursor:pointer;outline:none;user-select:none;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2393a0c8' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E")
+      no-repeat right 12px center/12px 8px,
+    linear-gradient(180deg,var(--surface2),var(--surface));
+  transition:border-color .16s,box-shadow .16s;
+}
+html .m3d-row select:hover{
+  border-color:var(--ac);
+  box-shadow:0 0 10px -2px color-mix(in srgb,var(--ac) 45%,transparent);
+}
+html .m3d-row select:focus-visible{border-color:var(--amber);box-shadow:var(--ring)}
+html .m3d-row select option{background:var(--surface);color:var(--text)}
+html .m3d-row select option:checked{background:var(--surface2);color:var(--cyan)}
+html .m3d-row select optgroup{background:var(--bg1);color:var(--dim);font-style:normal}
+
+/* ==========================================================================
+   13 · DROP-DOWN MENU — OPTIONAL NO-JS CUSTOM COMPONENT (.m3d-dd)
+   Usage:
+   <details class="m3d-dd"><summary>Formation</summary>
+     <ul role="listbox"><li role="option" aria-selected="true">Spiral galaxy</li>…</ul>
+   </details>
+   ========================================================================== */
+html .m3d-dd{position:relative;--ac:var(--cyan)}
+html .m3d-dd>summary{
+  list-style:none;height:36px;display:flex;align-items:center;justify-content:space-between;
+  gap:8px;padding:0 12px;border-radius:var(--r-md);border:1px solid var(--line2);
+  background:linear-gradient(180deg,var(--surface2),var(--surface));
+  color:var(--text);font-size:12px;cursor:pointer;user-select:none;transition:border-color .16s;
+}
+html .m3d-dd>summary::-webkit-details-marker{display:none}
+html .m3d-dd>summary::after{
+  content:"";width:12px;height:8px;flex:0 0 auto;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2393a0c8' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") center/contain no-repeat;
+  transition:transform .18s;
+}
+html .m3d-dd[open]>summary{border-color:var(--ac)}
+html .m3d-dd[open]>summary::after{transform:rotate(180deg)}
+html .m3d-dd>ul{
+  position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:20;list-style:none;
+  max-height:220px;overflow-y:auto;overscroll-behavior:contain;
+  border:1px solid var(--line2);border-radius:var(--r-md);
+  background:linear-gradient(180deg,rgba(17,28,61,.98),rgba(10,16,34,.98));
+  box-shadow:0 16px 40px -12px #000,0 0 0 1px rgba(63,214,255,.06);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  scrollbar-width:thin;scrollbar-color:var(--cyan) var(--bg1);
+  animation:m3ddrop .16s ease-out;
+}
+html .m3d-dd>ul::-webkit-scrollbar{width:8px}
+html .m3d-dd>ul::-webkit-scrollbar-thumb{background:linear-gradient(180deg,var(--cyan),var(--blue));border-radius:4px}
+html .m3d-dd>ul li{
+  padding:9px 12px;font-size:12px;color:var(--muted);cursor:pointer;
+  border-left:2px solid transparent;transition:background .12s,color .12s,border-color .12s;
+}
+html .m3d-dd>ul li:hover{
+  color:var(--text);border-left-color:var(--ac);
+  background:linear-gradient(90deg,color-mix(in srgb,var(--ac) 14%,transparent),transparent);
+}
+html .m3d-dd>ul li[aria-selected="true"]{color:var(--ac);border-left-color:var(--ac);font-weight:600}
+@keyframes m3ddrop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+
+/* ==========================================================================
+   14 · SWITCHES / SEGMENTED / BUTTONS / COLOR WELL
+   ========================================================================== */
+html .m3d-inline{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  font-size:11.5px;color:var(--muted);user-select:none;
+}
+html .m3d-switch{position:relative;width:38px;height:20px;flex:0 0 auto}
+html .m3d-switch input{position:absolute;opacity:0;inset:0;cursor:pointer;margin:0}
+html .m3d-switch i{position:absolute;inset:0;border-radius:10px;background:var(--line);
+  transition:background .18s;pointer-events:none}
+html .m3d-switch i::after{
+  content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;
+  background:var(--muted);transition:transform .18s,background .18s;
+}
+html .m3d-switch input:checked+i{background:color-mix(in srgb,var(--ac) 45%,var(--line))}
+html .m3d-switch input:checked+i::after{
+  transform:translateX(18px);background:var(--ac);box-shadow:0 0 8px var(--ac)}
+html .m3d-switch input:focus-visible+i{outline:2px solid var(--amber);outline-offset:2px}
+
+html .m3d-seg{display:flex;gap:4px;background:var(--bg1);border:1px solid var(--line);
+  border-radius:9px;padding:3px}
+html .m3d-seg button{
+  flex:1;padding:6px 4px;border-radius:6px;font-size:11px;letter-spacing:.04em;
+  color:var(--muted);transition:all .15s;white-space:nowrap;user-select:none;
+}
+html .m3d-seg button:hover{color:var(--text)}
+html .m3d-seg button[aria-pressed="true"]{
+  color:var(--bg0);font-weight:700;
+  background:linear-gradient(120deg,var(--ac),color-mix(in srgb,var(--ac) 55%,var(--blue)));
+  box-shadow:0 2px 10px -3px var(--ac);
+}
+
+html .m3d-btn{
+  padding:8px 12px;border-radius:9px;border:1px solid var(--line2);font-size:12px;
+  letter-spacing:.05em;background:rgba(17,28,61,.7);color:var(--text);
+  transition:all .16s;text-align:center;user-select:none;
+}
+html .m3d-btn:hover{
+  border-color:var(--ac);
+  box-shadow:0 0 12px color-mix(in srgb,var(--ac) 35%,transparent);
+}
+html .m3d-btn:active{transform:translateY(1px)}
+html .m3d-btn.primary{border:none;font-weight:700;color:var(--bg0);background:var(--grad-primary)}
+html .m3d-btn.primary:hover{filter:brightness(1.15)}
+html .m3d-btn.danger:hover{border-color:var(--red);box-shadow:0 0 12px rgba(255,84,112,.35)}
+html .m3d-btnrow{display:flex;gap:8px}
+html .m3d-btnrow .m3d-btn{flex:1}
+
+html .m3d-row input[type=color]{
+  width:100%;height:32px;border:1px solid var(--line2);border-radius:var(--r-md);
+  background:var(--surface2);padding:3px;cursor:pointer;
+}
+html .m3d-row input[type=color]::-webkit-color-swatch-wrapper{padding:2px}
+html .m3d-row input[type=color]::-webkit-color-swatch{border:none;border-radius:6px}
+html .m3d-row input[type=color]::-moz-color-swatch{border:none;border-radius:6px}
+
+/* ==========================================================================
+   15 · TOASTS / SHORTCUTS POPOVER
+   ========================================================================== */
+html #m3d-toasts{
+  position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:9;
+  display:flex;flex-direction:column;gap:7px;align-items:center;pointer-events:none;
+}
+html .m3d-toast{
+  padding:8px 15px;border-radius:10px;background:rgba(9,14,30,.92);
+  border:1px solid var(--tc,var(--cyan));color:var(--text);font-size:12px;
+  box-shadow:0 8px 26px -8px var(--tc,var(--cyan));
+  animation:m3dtoast .25s ease-out;max-width:78vw;text-align:center;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  will-change:transform,opacity;
+}
+html #m3d-keys{
+  position:absolute;top:60px;right:14px;z-index:10;width:230px;padding:12px 14px;
+  border-radius:12px;background:rgba(9,14,30,.96);border:1px solid var(--line2);
+  display:none;box-shadow:0 14px 40px -10px #000;
+}
+html #m3d-keys.open{display:block;animation:m3ddrop .16s ease-out}
+html #m3d-keys h4{font-size:10px;letter-spacing:.22em;color:var(--cyan);margin-bottom:8px}
+html #m3d-keys div{display:flex;justify-content:space-between;font-size:11.5px;
+  color:var(--muted);padding:2.5px 0}
+html #m3d-keys kbd{
+  font-family:var(--font-mono);color:var(--amber);background:var(--surface2);
+  border:1px solid var(--line2);border-radius:4px;padding:0 6px;font-size:10.5px;
+}
+
+/* ==========================================================================
+   16 · LOADING OVERLAY
+   ========================================================================== */
+html #m3d-loader{
+  position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:18px;
+  background:radial-gradient(100% 100% at 50% 30%,#0e1735 0%,var(--bg0) 80%);
+  transition:opacity .5s;
+}
+html #m3d-loader.done{opacity:0;pointer-events:none}
+html #m3d-lcube{width:74px;height:74px;perspective:400px}
+html #m3d-lcube .c{width:100%;height:100%;position:relative;transform-style:preserve-3d;
+  animation:m3dspin 3.2s linear infinite;will-change:transform}
+html #m3d-lcube .f{
+  position:absolute;inset:8px;border:2px solid var(--cyan);border-radius:4px;
+  background:linear-gradient(135deg,rgba(63,214,255,.18),rgba(255,61,158,.14));
+}
+html #m3d-lcube .f:nth-child(1){transform:translateZ(29px)}
+html #m3d-lcube .f:nth-child(2){transform:rotateY(90deg) translateZ(29px);border-color:var(--magenta)}
+html #m3d-lcube .f:nth-child(3){transform:rotateY(180deg) translateZ(29px);border-color:var(--blue)}
+html #m3d-lcube .f:nth-child(4){transform:rotateY(-90deg) translateZ(29px);border-color:var(--amber)}
+html #m3d-lcube .f:nth-child(5){transform:rotateX(90deg) translateZ(29px);border-color:var(--green)}
+html #m3d-lcube .f:nth-child(6){transform:rotateX(-90deg) translateZ(29px);border-color:var(--violet)}
+html #m3d-ltitle{font-size:13px;letter-spacing:.3em;color:var(--cyan)}
+html #m3d-lbar{width:min(340px,72vw);height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+html #m3d-lbar i{
+  display:block;height:100%;width:0%;border-radius:3px;transition:width .25s;
+  background:linear-gradient(90deg,var(--cyan),var(--blue),var(--magenta));
+}
+html #m3d-lstep{font-size:11.5px;color:var(--muted);min-height:16px}
+html #m3d-lmods{display:flex;gap:5px;flex-wrap:wrap;justify-content:center;max-width:340px}
+html .m3d-mod{
+  font-size:9.5px;font-family:var(--font-mono);padding:2px 7px;border-radius:5px;
+  border:1px solid var(--line);color:var(--dim);transition:all .3s;
+}
+html .m3d-mod.live{border-color:var(--green);color:var(--green);box-shadow:0 0 8px -3px var(--green)}
+html .m3d-mod.shim{border-color:var(--amber);color:var(--amber)}
+html #m3d-lerr{display:none;max-width:400px;text-align:center;color:var(--red);
+  font-size:12px;line-height:1.6}
+html #m3d-lerr .m3d-btn{margin-top:10px}
+
+/* ==========================================================================
+   17 · KEYFRAMES (compositor-only: transform / opacity)
+   ========================================================================== */
+@keyframes m3dspin{from{transform:rotateX(-24deg) rotateY(0)}to{transform:rotateX(-24deg) rotateY(360deg)}}
+@keyframes m3dtoast{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ==========================================================================
+   18 · RESPONSIVE — ANDROID FIRST
+   ========================================================================== */
+@media (max-width:900px){
+  html #m3d-main{flex-direction:column}
+  html #m3d-panel{flex:0 0 40vh;min-height:252px;border-left:none;border-top:1px solid var(--line)}
+  html #m3d-sub{display:none}
+  html .m3d-tab{min-width:170px}
+  html #m3d-hud{max-width:calc(100% - 110px)}
+  html #m3d-scale{bottom:8px;right:8px;font-size:10.5px}
+}
+@media (max-width:900px) and (orientation:landscape){
+  html #m3d-main{flex-direction:row}
+  html #m3d-panel{flex:0 0 300px;min-height:0;border-top:none;border-left:1px solid var(--line)}
+}
+@media (max-width:480px){
+  html #m3d-top{padding:0 10px;gap:9px}
+  html #m3d-title{font-size:13px;letter-spacing:.1em}
+  html #m3d-tabs{padding:8px 10px;gap:7px}
+  html .m3d-tab{min-width:150px;padding:7px 10px}
+  html .m3d-tab .d{display:none}
+  html #m3d-pscroll{padding:10px 12px 16px}
+  html .m3d-chip{font-size:10px;padding:3px 7px}
+  html #m3d-spark{width:72px}
+  html #m3d-hint{font-size:10.5px;max-width:60vw}
+}
+/* Coarse pointers: comfortable touch targets (≥44px effective). */
+@media (pointer:coarse){
+  html .m3d-row input[type=range]{height:34px}
+  html .m3d-row input[type=range][aria-label*="count" i],
+  html .m3d-row--amount input[type=range]{height:40px}
+  html .m3d-row input[type=range][aria-label*="count" i]::-webkit-slider-thumb,
+  html .m3d-row--amount input[type=range]::-webkit-slider-thumb{width:26px;height:26px;margin-top:-9px}
+  html .m3d-row select,html .m3d-dd>summary{height:44px}
+  html .m3d-btn{min-height:44px}
+  html .m3d-qbtn{width:42px;height:42px}
+  html .m3d-seg button{padding:10px 4px}
+  html .m3d-dd>ul li{padding:12px}
+}
+
+/* ==========================================================================
+   19 · ACCESSIBILITY — REDUCED MOTION / FORCED COLORS
+   ========================================================================== */
+@media (prefers-reduced-motion:reduce){
+  html #m3d-logo .c,html #m3d-lcube .c{animation:none}
+  html .m3d-toast,html #m3d-keys.open,html .m3d-dd>ul{animation:none}
+  html #m3d-root *,html #m3d-root *::before,html #m3d-root *::after{
+    transition-duration:.01ms !important}
+}
+@media (forced-colors:active){
+  html #m3d-root{background:Canvas;color:CanvasText}
+  html .m3d-sec,html .m3d-tab,html .m3d-chip,html .m3d-btn,
+  html .m3d-row select,html .m3d-dd>summary{border-color:CanvasText}
+  html .m3d-btn.primary,html .m3d-seg button[aria-pressed="true"]{
+    background:Highlight;color:HighlightText;forced-color-adjust:none}
+  html .m3d-row input[type=range]::-webkit-slider-runnable-track{background:CanvasText}
+}

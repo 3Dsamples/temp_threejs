@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>Generic Import Map App</title>
+
+  <!--
+    Docs-only reference links:
+    https://github.com/munrocket/double-js/tree/master/dist
+    https://github.com/NateTheGreatt/bitECS/tree/main/src/core
+    https://github.com/toji/gl-matrix/tree/master/src
+    https://github.com/jwagner/simplex-noise.js/tree/main/perf
+  -->
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/",
+        "simplex-noise": "https://cdn.jsdelivr.net/npm/simplex-noise@4.0.3/dist/esm/simplex-noise.js",
+        "bitecs": "https://cdn.jsdelivr.net/npm/bitecs@0.4.0/dist/core/index.mjs",
+        "gl-matrix": "https://cdn.jsdelivr.net/npm/gl-matrix@3.4.4/gl-matrix-min.js",
+        "double.js": "https://cdn.jsdelivr.net/npm/double.js/dist/double.js"
+      }
+    }
+  </script>
+
+  <link
+    rel="modulepreload"
+    href="https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js"
+    crossorigin="anonymous"
+    fetchpriority="high"
+  >
+  <link
+    rel="modulepreload"
+    href="https://cdn.jsdelivr.net/npm/simplex-noise@4.0.3/dist/esm/simplex-noise.js"
+    crossorigin="anonymous"
+  >
+  <link
+    rel="modulepreload"
+    href="https://cdn.jsdelivr.net/npm/bitecs@0.4.0/dist/core/index.mjs"
+    crossorigin="anonymous"
+  >
+
+  <link
+    rel="preload"
+    as="script"
+    href="https://cdn.jsdelivr.net/npm/gl-matrix@3.4.4/gl-matrix-min.js"
+  >
+  <link
+    rel="preload"
+    as="script"
+    href="https://cdn.jsdelivr.net/npm/double.js/dist/double.js"
+  >
+
+  <!--
+    gl-matrix and double.js are UMD builds.
+    They are also loaded as classic scripts so window.glMatrix / window.double are available
+    before deferred ES modules run.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/gl-matrix@3.4.4/gl-matrix-min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/double.js/dist/double.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      color: #fff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    #app {
+      position: fixed;
+      inset: 0;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+
+    #doc-references {
+      display: none;
+      visibility: hidden;
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app"></div>
+
+  <!-- Hidden code-reference links, not visible on screen. -->
+  <nav id="doc-references" aria-hidden="true">
+    <a href="https://github.com/munrocket/double-js/tree/master/dist">double.js dist reference</a>
+    <a href="https://github.com/NateTheGreatt/bitECS/tree/main/src/core">bitECS core reference</a>
+    <a href="https://github.com/toji/gl-matrix/tree/master/src">gl-matrix source reference</a>
+    <a href="https://github.com/jwagner/simplex-noise.js/tree/main/perf">simplex-noise perf reference</a>
+  </nav>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    const container = document.getElementById('app');
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance',
+      alpha: false,
+      depth: true,
+      stencil: false
+    });
+
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(
+      50,
+      window.innerWidth / Math.max(1, window.innerHeight),
+      0.1,
+      100
+    );
+    camera.position.set(0, 0, 3);
+
+    const geometry = new THREE.BoxGeometry(1, 1, 1);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x00ccff,
+      metalness: 0.35,
+      roughness: 0.25
+    });
+    const cube = new THREE.Mesh(geometry, material);
+    scene.add(cube);
+
+    const directional = new THREE.DirectionalLight(0xffffff, 2.2);
+    directional.position.set(3, 5, 4);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+    scene.add(directional, ambient);
+
+    function onResize() {
+      const w = Math.max(1, window.innerWidth);
+      const h = Math.max(1, window.innerHeight);
+
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h, false);
+    }
+
+    window.addEventListener('resize', onResize, { passive: true });
+
+    renderer.setAnimationLoop(() => {
+      cube.rotation.x += 0.010;
+      cube.rotation.y += 0.012;
+      renderer.render(scene, camera);
+    });
+
+    // Optional runtime dependency sanity checks.
+    console.assert(!!window.glMatrix, 'gl-matrix UMD global missing.');
+    console.assert(
+      !!(window.Double || window.double || window.doubleJS || window.DoubleJS),
+      'double.js UMD global missing.'
+    );
+  </script>
+</body>
+</html>
